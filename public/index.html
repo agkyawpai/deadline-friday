@@ -13,21 +13,25 @@
 
   <div id="topbar" class="hidden">
     <div class="tb-day"><b id="hud-day"></b><span id="hud-clock"></span></div>
-    <div class="tb-meter"><label data-i18n="hud_progress"></label><div class="bar"><div id="hud-progress" class="fill prog"></div></div><span id="hud-progress-t"></span></div>
-    <div class="tb-stat">🐛 <span id="hud-bugs"></span></div>
+    <div class="tb-stat" title="Tickets">🎫 <span id="hud-tickets"></span></div>
+    <div class="tb-stat" title="Prod bugs">🐛 <span id="hud-prod"></span></div>
     <div class="tb-meter"><label data-i18n="hud_client"></label><div class="bar"><div id="hud-client" class="fill client"></div></div><span id="hud-client-t"></span></div>
     <div id="hud-chips"></div>
   </div>
+  <div id="hint" class="hidden"></div>
+  <div id="deploy-hud" class="hidden"></div>
 
   <div id="players" class="hidden"></div>
   <div id="toasts"></div>
-  <div id="corner"><button id="btn-lang"></button><button id="btn-mute">🔊</button></div>
+  <div id="corner"><button id="btn-board" class="hidden" data-i18n="boardBtn"></button><button id="btn-lang"></button><button id="btn-mute">🔊</button></div>
+  <div id="chat" class="hidden"></div>
 
   <div id="bottombar" class="hidden">
     <button id="btn-action" class="hidden"></button>
     <div class="row">
       <div id="emotes"></div>
       <button id="btn-ability" class="hidden"><span class="cd"></span><span class="lbl"></span></button>
+      <button id="btn-secret" class="hidden"><span class="cd"></span><span class="lbl"></span></button>
     </div>
   </div>
   <div id="help" class="hidden" data-i18n="controls"></div>
@@ -37,11 +41,11 @@
       <div class="logo">🔥💻☕</div>
       <h1 data-i18n="title"></h1>
       <p class="muted" data-i18n="subtitle"></p>
-      <input id="join-name" maxlength="14" autocomplete="off" data-i18n-ph="yourName">
+      <input id="join-name" maxlength="14" autocomplete="off" aria-label="Name" data-i18n-ph="yourName">
       <button id="btn-create" class="btn primary" data-i18n="createRoom"></button>
       <div class="or" data-i18n="or"></div>
       <div class="join-row">
-        <input id="join-code" maxlength="6" autocomplete="off" data-i18n-ph="roomCodePh">
+        <input id="join-code" maxlength="6" autocomplete="off" aria-label="Room code" data-i18n-ph="roomCodePh">
         <button id="btn-join" class="btn" data-i18n="joinRoom"></button>
       </div>
       <p id="join-err" class="err"></p>
@@ -49,9 +53,16 @@
   </div>
   <div id="lobby-panel" class="panel hidden"></div>
 
+  <div id="board" class="panel-wide hidden">
+    <div class="board-head"><b data-i18n="board_title"></b><button class="board-close">✕</button></div>
+    <div class="board-body"></div>
+  </div>
+
   <div id="briefing" class="overlay hidden"></div>
-  <div id="standup" class="overlay hidden"></div>
-  <div id="retro" class="overlay hidden"><div class="card"><div class="retro-left"></div><div class="retro-body"></div></div></div>
+  <div id="morning" class="overlay hidden"><div class="card wide"><div class="m-head"></div><div class="m-board"></div><p class="countdown m-left"></p></div></div>
+  <div id="evening" class="overlay hidden"></div>
+  <div id="meeting" class="overlay hidden"><div class="card"><div class="mt-left countdown"></div><div class="mt-body"></div></div></div>
+  <div id="retro" class="overlay hidden"><div class="card"><div class="retro-left countdown"></div><div class="retro-body"></div></div></div>
   <div id="results" class="overlay hidden"></div>
   <div id="frozen" class="hidden"></div>
   <div id="modal" class="hidden"></div>

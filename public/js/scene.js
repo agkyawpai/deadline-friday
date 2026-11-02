@@ -147,7 +147,7 @@ export class Office {
     s.add(clock);
 
     // Plants
-    for (const [x, z] of [[11, 7], [11, 1.2], [-11.2, 3.3], [-0.2, 7]]) {
+    for (const [x, z] of [[11, 7], [11.1, -3.6], [-11.2, 3.3], [-0.2, 7]]) {
       const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.22, 0.5, 8), mat('#d35400'));
       pot.position.set(x, 0.25, z);
       pot.castShadow = true;
@@ -186,7 +186,8 @@ export class Office {
         case 'phone': this.buildPhoneDesk(g); break;
         case 'coffee': this.buildCoffee(g); break;
         case 'server': this.buildServer(g); break;
-        case 'bugs': this.buildBugBoard(g); break;
+        case 'board': this.buildSprintBoard(g); break;
+        case 'qa': this.buildQaLab(g); break;
         case 'meeting': this.buildMeeting(g); break;
         default: break;
       }
@@ -197,10 +198,29 @@ export class Office {
     };
     lbl('coffee', '☕', 2.3);
     lbl('server', '🖥️', 2.9);
-    lbl('phone', '📞', 1.7);
+    lbl('phone', '📞 Sales', 1.7);
+    lbl('qa', '🔍 QA', 1.9);
+    lbl('board', '📋 Sprint', 2.8);
     lbl('exit', '🚪 EXIT', 2.4);
     lbl('meeting', '🍕', 1.6);
     this.stationLabels.meeting.el.classList.add('hidden');
+  }
+
+  buildQaLab(g) {
+    box(g, 1.6, 0.08, 1.0, '#dfe6e9', 0, 0.76, 0);
+    for (const [x, z] of [[-0.72, -0.42], [0.72, -0.42], [-0.72, 0.42], [0.72, 0.42]]) box(g, 0.07, 0.76, 0.07, '#636e72', x, 0.38, z);
+    // a row of test phones and a tablet
+    for (let i = 0; i < 3; i++) {
+      box(g, 0.16, 0.3, 0.03, '#2d3436', -0.5 + i * 0.25, 0.95, -0.2, false);
+      const scr = new THREE.Mesh(new THREE.PlaneGeometry(0.13, 0.25), new THREE.MeshBasicMaterial({ color: ['#55efc4', '#74b9ff', '#ffeaa7'][i] }));
+      scr.position.set(-0.5 + i * 0.25, 0.95, -0.18);
+      g.add(scr);
+    }
+    box(g, 0.5, 0.03, 0.36, '#2d3436', 0.45, 0.8, 0.15, false);
+    const net = new THREE.Mesh(new THREE.TorusGeometry(0.18, 0.02, 6, 16), mat('#00b894'));
+    net.position.set(0.55, 1.15, -0.15);
+    g.add(net);
+    box(g, 0.03, 0.5, 0.03, '#8d6e63', 0.55, 0.85, -0.15, false);
   }
 
   buildDesk(g, withChair) {
@@ -267,13 +287,13 @@ export class Office {
     this.serverGroup = g;
   }
 
-  buildBugBoard(g) {
+  buildSprintBoard(g) {
     box(g, 2.7, 1.6, 0.06, '#8d6e63', 0, 1.75, 0.15, false);
-    this.bugTex = canvasTexture(512, 288, () => {});
-    const board = new THREE.Mesh(new THREE.PlaneGeometry(2.5, 1.4), new THREE.MeshBasicMaterial({ map: this.bugTex }));
+    this.boardTex = canvasTexture(576, 320, () => {});
+    const board = new THREE.Mesh(new THREE.PlaneGeometry(2.5, 1.4), new THREE.MeshBasicMaterial({ map: this.boardTex }));
     board.position.set(0, 1.75, 0.19);
     g.add(board);
-    this.setBugs(0);
+    this.setBoard([]);
   }
 
   buildMeeting(g) {
@@ -514,21 +534,52 @@ export class Office {
     this.minHand.rotation.z = -((hours % 1) * Math.PI * 2);
     this.hourHand.rotation.z = -(((hours % 12) / 12) * Math.PI * 2);
   }
-  setBugs(n) {
-    if (this.bugCount === n) return;
-    this.bugCount = n;
-    const c = this.bugTex.userData.canvas;
+  // Kanban on the wall: one sticky note per ticket in its stage column.
+  setBoard(tickets) {
+    const key = tickets.map((tk) => tk.id + tk.stage).join(',');
+    if (this.boardKey === key) return;
+    this.boardKey = key;
+    const c = this.boardTex.userData.canvas;
     const ctx = c.getContext('2d');
+    const cols = ['TODO', 'DEV', 'REVIEW', 'QA', 'DEMO', 'DONE'];
+    const stages = ['todo', 'dev', 'review', 'qa', 'demo', 'done'];
+    const colW = c.width / cols.length;
     ctx.fillStyle = '#fdfdfd'; ctx.fillRect(0, 0, c.width, c.height);
-    const notes = ['#ffeaa7', '#fab1a0', '#81ecec', '#a29bfe'];
-    for (let i = 0; i < Math.min(n, 24); i++) {
-      ctx.fillStyle = notes[i % 4];
-      ctx.fillRect(20 + (i % 8) * 60, 130 + Math.floor(i / 8) * 50, 48, 40);
+    ctx.font = 'bold 20px sans-serif';
+    ctx.textAlign = 'center';
+    cols.forEach((name, i) => {
+      ctx.fillStyle = i % 2 ? '#f1f2f6' : '#fdfdfd';
+      ctx.fillRect(i * colW, 0, colW, c.height);
+      ctx.fillStyle = '#2d3436';
+      ctx.fillText(name, i * colW + colW / 2, 28);
+      const notes = tickets.filter((tk) => tk.stage === stages[i]);
+      notes.slice(0, 6).forEach((tk, j) => {
+        ctx.fillStyle = ['#ffeaa7', '#fab1a0', '#81ecec', '#a29bfe', '#55efc4', '#fd79a8'][tk.id % 6];
+        ctx.fillRect(i * colW + 10, 44 + j * 44, colW - 20, 38);
+        ctx.fillStyle = '#2d3436';
+        ctx.fillText(`#${tk.id} ${tk.key}`.slice(0, 10), i * colW + colW / 2, 70 + j * 44);
+      });
+    });
+    this.boardTex.needsUpdate = true;
+  }
+
+  setDeploy(d) {
+    const ids = ['server', 'board', 'qa', 'phone'];
+    if (!this.deployRings) {
+      this.deployRings = ids.map((id) => {
+        const st = this.stationById[id];
+        const r = new THREE.Mesh(new THREE.RingGeometry(1.1, 1.45, 32), new THREE.MeshBasicMaterial({ color: '#ff922b', transparent: true, opacity: 0.8, side: THREE.DoubleSide }));
+        r.rotation.x = -Math.PI / 2;
+        r.position.set(st.x, 0.04, st.z + (id === 'board' ? 1.2 : 0));
+        r.visible = false;
+        this.scene.add(r);
+        return r;
+      });
     }
-    ctx.fillStyle = n > 15 ? '#d63031' : '#2d3436';
-    ctx.font = 'bold 64px sans-serif';
-    ctx.fillText(`🐛 BUGS: ${n}`, 24, 90);
-    this.bugTex.needsUpdate = true;
+    this.deployRings.forEach((r, i) => {
+      r.visible = !!d;
+      if (d) r.material.color.set(d.occupied.includes(ids[i]) ? '#51cf66' : '#ff922b');
+    });
   }
   setCEO(leftMs, totalMs = 12000) {
     const on = leftMs > 0;
@@ -668,6 +719,7 @@ export class Office {
     }
     if (this.pizza.visible) this.pizza.rotation.y += dt * 0.8;
     if (this.ring.visible) this.ring.material.opacity = 0.5 + Math.sin(t * 6) * 0.3;
+    if (this.deployRings?.[0].visible) for (const r of this.deployRings) r.scale.setScalar(1 + Math.sin(t * 5) * 0.06);
 
     // Camera follow + shake
     // Landscape: nudge the view down a bit so the top HUD doesn't cover the back wall.

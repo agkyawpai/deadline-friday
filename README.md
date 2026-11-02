@@ -50,28 +50,58 @@ vercel deploy --prod --yes   # redeploy so the env vars are picked up
 | Move | WASD / arrow keys / click the floor | Tap the floor |
 | Interact (yellow ring) | `E` / `Space` | Big yellow button |
 | Role ability | `Q` | Blue button |
+| Secret action (agenda) | `F` | Purple button |
+| Sprint Board | `B` | 📋 Board (top right) |
+| Slack chat | `Enter` | 💬 (top right) |
 | Emote | `1`–`5` | Bottom buttons |
 
-**1 match ≈ 8 minutes**: Briefing → Mon–Fri (90 seconds per day) → Sprint Retro (blame vote) → Results.
+**1 match ≈ 12 minutes.** The yellow hint bar at the top always tells you what to do next.
 
-### Roles (random)
-| Role | Strength | Ability (Q) |
+### A day in the office
+| Phase | What happens |
+|---|---|
+| 🌅 Morning standup | Today's theme and new tickets. Claim one |
+| 💻 Work | Tickets move through **Dev → Review → QA → Demo → Done** (desk → Sprint Board → QA lab → sales desk) |
+| 🗳️ Midday meeting | Mon/Wed: a client decision vote. Tue/Thu: a **PIP vote** (the most-voted player loses their ability, secret action and coding speed until tomorrow) |
+| 🌙 Evening | Tickets shipped today, overdue penalties, and on Wednesday the client demo result |
+
+| Day | Theme |
+|---|---|
+| Mon | 📋 Planning: 2 tickets, bonus-feature decision |
+| Tue | 💻 Build: 2 tickets, PIP vote |
+| Wed | 🎤 Client Demo: ship at least one ticket today or lose client −15. "AI everything?" decision |
+| Thu | 🧊 Code Freeze: no new tickets, PIP vote |
+| Fri | 🚀 Deploy: in the afternoon everyone must **hold** the glowing stations (server, board, QA, phone) at the same time |
+
+Then comes the 💰 **Peer Review**: everyone gives 10 bonus points to teammates and blames one person. The results screen reveals the **true git log**.
+
+### Roles (random; with fewer players the stage falls back to "anyone")
+| Role | Job in the pipeline | Ability (Q) |
 |---|---|---|
-| 👔 Manager | Codes ×0.4 | All-hands Meeting: pulls everyone into the meeting room, freezes 5s, stress −20, client +5 |
-| 🧭 Team Leader | Codes ×1.2 | Code Review: no new bugs for 15s |
-| 🧙 Senior Dev | Codes ×1.6 (only after coffee) | Refactor: bugs −40% |
-| 🐣 Junior Dev | Codes ×0.9, lots of bugs | Ask AI: 50% big progress / 50% +5 bugs |
-| 🔍 QA Tester | Bug hunt ×2 | Blame Report: nearest teammate gets stress +15 and a blame mark |
-| 💼 Sales | Client calls ×2 | Promise Feature: client +18, scope +7% |
+| 🧙 Senior Dev | Codes ×1.6 (only after coffee) | Refactor: halves bugs on open tickets, −40% prod bugs |
+| 🐣 Junior Dev | Codes ×0.9, many hidden bugs | Ask AI: 50% big progress / 50% secretly adds bugs |
+| 🔍 QA Tester | Tests tickets (squash every 🐛, avoid 🦋) | Git Blame: privately reveals who did the latest suspicious action |
+| 🧭 Team Leader | Reviews tickets (spot the buggy line) | Review Mode: no new bugs for 15s |
+| 💼 Sales | Demos tickets to the client (timing game) | Promise Feature: client +18, +1 ticket |
+| 👔 Manager | Backup reviewer/demoer | Emergency All-hands: instant PIP vote (once a day) |
 
-### Secret agendas (one per player)
-Promotion Hunter, Work-Life Balance, Coffee Addict, Blame Master, Bug Collector, and with 4+ players at most one **Secret Job Hunter 🕵️** (wins if the project does NOT ship).
+A ticket left waiting **20s** in Review/QA/Demo escalates, and then **anyone** can do that step. Stalling is suspicious!
+
+### Secret agendas and sabotage
+| Agenda | Win | Secret action (F) |
+|---|---|---|
+| 🕵️ Job Hunter (4+ players, max 1) | The project does NOT ship | Inject hidden bugs, or unplug the server during the deploy |
+| Promotion Hunter | Most peer-review bonus points | Steal the dev credit of a finished ticket |
+| Blame Master | The person you blame ends up most blamed (not you) | Plant fake evidence on the nearest teammate |
+| Work-Life / Coffee / Bug Collector | Exit door on 3 days / 8 coffees / 15 bugs | — |
+
+Every sabotage posts a partial clue (time, place, and a colour or role a witness saw) in **#git-log**. Frames look exactly like real sabotage.
 
 ### Chaos events
-🔥 Production Down (server on fire), 📞 client call, 🪟 forced OS update, 📶 WiFi down, 👴 CEO visit, 🍕 free pizza, ☕💥 coffee machine broken, 💥 `git push --force`.
+🔥 Production Down (server on fire), 📞 client call, 🪟 forced OS update, 📶 WiFi down (Slack offline!), 👴 CEO visit, 🍕 free pizza, ☕💥 coffee machine broken, 💥 `git push --force`.
 
 ### Endings
-🏆 Shipped · 🔥 Shipped… on fire · 📉 Deadline missed · ❌ Project cancelled · 🚪 Mass resignation
+🏆 Shipped · 🔥 Shipped half-baked · 📉 Not enough features · 💥 Deploy failed · ❌ Project cancelled · 🚪 Mass resignation
 
 ## Tech
 - **Three.js** (low-poly, all procedural geometry, no model files) + **GSAP** for UI animation (both vendored in `public/vendor/`)

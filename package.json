@@ -1,6 +1,6 @@
 {
   "name": "deadline-friday",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Deadline: Friday 5PM - lightweight multiplayer IT corporate chaos game (max 6 players). LAN or Vercel + Upstash Redis.",
   "main": "server.js",
   "scripts": {

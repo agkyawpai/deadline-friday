@@ -52,7 +52,7 @@ export class Net {
 
   interval() {
     if (document.hidden) return 1000;
-    return this.phase === 'playing' ? 200 : 400;
+    return ['playing', 'deploy', 'meeting'].includes(this.phase) ? 200 : 400;
   }
 
   async sync() {
@@ -66,7 +66,7 @@ export class Net {
       const res = await fetch('/api/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code, pid: this.pid, pos: this.pos, acts: this.pending, lastEv: Math.max(0, this.lastEv), tpAck: this.tpAck }),
+        body: JSON.stringify({ code, pid: this.pid, pos: this.pos, hold: this.hold || null, acts: this.pending, lastEv: Math.max(0, this.lastEv), tpAck: this.tpAck }),
       });
       out = await res.json();
       this.fails = 0;
@@ -87,7 +87,7 @@ export class Net {
       this.phase = s.phase;
       this.pending = this.pending.filter((a) => a.seq > s.ackSeq);
       const first = this.lastEv < 0;
-      for (const e of s.events) if (!first || e.to) this.onEvent?.(e);
+      for (const e of s.events) if (!first || e.to || e.t === 'chat') this.onEvent?.(e); // keep Slack history on reload
       this.lastEv = s.evSeq;
       if (s.me && s.me.tp > this.tpAck) {
         this.tpAck = s.me.tp;

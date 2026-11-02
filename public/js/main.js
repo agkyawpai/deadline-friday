@@ -2,19 +2,24 @@ import { Office, escapeHtml } from './scene.js';
 import { t, setLang, getLang, ROLE_ICON } from './i18n.js';
 import { Minigames } from './minigames.js';
 import { Net } from './net.js';
+import { Chat } from './chat.js';
+import * as P from './panels.js';
 
 const $ = (s) => document.querySelector(s);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const { show, setHTML, tkName } = P;
+const DEPLOY_STATIONS = ['server', 'board', 'qa', 'phone'];
 
-let myId = null;
 let world = null;
 let office = null;
 let state = null;
-let priv = null;
 let joined = false;
 let lastPhase = null;
 let action = null;
 let moveTarget = null;
+let boardOpen = false;
+let holding = false;
+let typing = false;
 const me = { x: 2, z: 5, face: 0, moving: false };
 const keys = new Set();
 
@@ -26,7 +31,7 @@ const SFX = {
   pop: [[1200, 0.05]], mash: [[240, 0.05, 'square']], slurp: [[420, 0.1], [300, 0.15]],
   win: [[523, 0.1], [659, 0.1], [784, 0.18]], good: [[523, 0.08], [784, 0.12]], bad: [[392, 0.1], [262, 0.18]],
   alarm: [[880, 0.18, 'square'], [660, 0.18, 'square'], [880, 0.18, 'square'], [660, 0.18, 'square']],
-  ring: [[1300, 0.07], [1550, 0.07], [1300, 0.07], [1550, 0.07]], toast: [[700, 0.05]],
+  ring: [[1300, 0.07], [1550, 0.07], [1300, 0.07], [1550, 0.07]], toast: [[700, 0.05]], chat: [[1000, 0.03], [1400, 0.04]],
 };
 function sfx(name) {
   if (muted || !actx) return;
@@ -45,23 +50,20 @@ function sfx(name) {
   }
 }
 
-const mg = new Minigames({ modal: $('#modal'), send: emit, sfx });
+const mg = new Minigames({ modal: $('#modal'), send: emit, sfx, onOpenBoard: () => setBoard(true) });
+const chat = new Chat($('#chat'), {
+  send: (text, to) => net.send('chat', { text, to }),
+  onFocusChange: (on) => { typing = on; if (on) keys.clear(); },
+});
 
 // ---------- Helpers ----------
-const cache = new Map();
-function setHTML(el, html) {
-  if (cache.get(el) === html) return;
-  cache.set(el, html);
-  el.innerHTML = html;
-}
-function show(el, on) { el.classList.toggle('hidden', !on); }
 function toast(text, kind = 'info') {
   const el = document.createElement('div');
   el.className = `toast ${kind}`;
   el.textContent = text;
   const box = $('#toasts');
   box.prepend(el);
-  while (box.children.length > 5) box.lastChild.remove();
+  while (box.children.length > 4) box.lastChild.remove();
   window.gsap.fromTo(el, { y: -16, opacity: 0 }, { y: 0, opacity: 1, duration: 0.3 });
   setTimeout(() => window.gsap.to(el, { opacity: 0, duration: 0.4, onComplete: () => el.remove() }), 4500);
 }
@@ -70,10 +72,13 @@ function applyStaticText() {
   document.querySelectorAll('[data-i18n-ph]').forEach((el) => { el.placeholder = t(el.dataset.i18nPh); });
   $('#btn-lang').textContent = t('langBtn');
   document.title = t('title');
-  cache.clear();
+  P.clearCache();
+  chat.playersKey = null;
+  chat.render();
 }
-const myState = () => state && state.players.find((p) => p.id === myId);
+const myState = () => state && state.players.find((p) => p.id === net.pid);
 const secs = (ms) => Math.ceil(ms / 1000);
+function setBoard(on) { boardOpen = on; if (state) P.renderBoard(state, net.pid, boardOpen); }
 
 // ---------- Networking ----------
 const net = new Net({
@@ -87,8 +92,10 @@ const net = new Net({
   onEvent: (e) => {
     switch (e.t) {
       case 'fx': return onFx(e);
+      case 'chat': chat.add(e); if (e.from !== net.pid) sfx('chat'); return;
       case 'emote': office?.showEmote(e.id, t(`emote${e.i}`)); return sfx('toast');
       case 'codeResult': return mg.codeResult(e);
+      case 'qaResult': return mg.qaResult(e);
       case 'bugsResult': return mg.bugsResult(e);
       case 'denied': return leaveRoom(t(e.key));
       default:
@@ -99,7 +106,6 @@ const net = new Net({
     leaveRoom(t(err === 'noRoom' ? 'noRoom' : 'syncError'));
   },
 });
-myId = net.pid;
 
 // Actions from UI / minigames. 'task' payloads use `type` for the task kind on the client side.
 function emit(ev, data) {
@@ -107,15 +113,14 @@ function emit(ev, data) {
     const { type, ...rest } = data;
     net.send('task', { kind: type, ...rest });
   } else if (ev === 'emote') net.send('emote', { i: data });
-  else if (ev === 'vote') net.send('vote', { target: data });
   else net.send(ev, data);
 }
 
 function onFx({ key, params, kind }) {
   toast(t(key, params), kind);
-  if (key === 'ev_fire') { sfx('alarm'); office?.shake(0.9); }
+  if (key === 'ev_fire' || key === 'ev_deploy' || key === 'ev_emergency') { sfx('alarm'); office?.shake(0.9); }
   else if (key === 'ev_phone') sfx('ring');
-  else if (key === 'ab_used_manager' || key === 'ev_forcepush') { sfx('bad'); office?.shake(0.6); }
+  else if (key === 'ev_forcepush' || key === 'mt_pip') { sfx('bad'); office?.shake(0.6); }
   else if (kind === 'chaos') { sfx('bad'); office?.shake(0.35); }
   else if (kind === 'good') sfx('good');
   else if (kind === 'bad') sfx('bad');
@@ -132,6 +137,7 @@ function enterRoom(code, create) {
     localStorage.setItem('df_name', name);
     sessionStorage.setItem('df_room', code);
   } catch { /* storage unavailable */ }
+  chat.clear();
   net.start(code);
   net.send('join', { name, create });
 }
@@ -139,14 +145,14 @@ function leaveRoom(message = '') {
   net.stop();
   joined = false;
   state = null;
-  priv = null;
   lastPhase = null;
-  mg.close(true);
+  mg.close();
   try { sessionStorage.removeItem('df_room'); } catch { /* storage unavailable */ }
   $('#join-err').textContent = message;
   show($('#join'), true);
-  for (const id of ['#lobby-panel', '#topbar', '#players', '#bottombar', '#help', '#briefing', '#standup', '#retro', '#results', '#frozen']) show($(id), false);
-  office?.syncPlayers([], myId, null);
+  for (const id of ['#lobby-panel', '#topbar', '#players', '#bottombar', '#help', '#briefing', '#morning', '#evening', '#meeting', '#retro', '#results', '#frozen', '#board', '#deploy-hud', '#hint']) show($(id), false);
+  chat.setVisible(false);
+  office?.syncPlayers([], net.pid, null);
 }
 const ROOM_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 function createRoom() {
@@ -165,218 +171,184 @@ function onState(s) {
   const mine = myState();
   if (mine && !joined) show($('#join'), false);
   joined = !!mine;
-  priv = s.me && s.me.role ? { role: s.me.role, agenda: s.me.agenda } : null;
   if (s.phase !== lastPhase) onPhaseChange(s.phase);
   if (!office) return;
 
-  office.syncPlayers(s.players, myId, joined && mine ? me : null);
+  office.syncPlayers(s.players, net.pid, joined && mine ? me : null);
   office.setFire(s.fire);
   office.setPhone(s.phone);
   office.setPizza(s.pizza > 0);
   office.setCoffeeBroken(s.coffeeBroken);
   office.setCEO(s.ceo);
-  office.setBugs(s.bugs);
-  const dayHours = s.day === 5 ? 8 : 9;
-  const hours = s.phase === 'playing' ? 9 + (1 - s.left / s.total) * dayHours
-    : s.phase === 'standup' ? 18 : s.phase === 'retro' || s.phase === 'results' ? 17 : 9;
-  office.setClock(hours);
+  office.setBoard(s.tickets);
+  office.setDeploy(s.deploy);
+  office.setClock(s.clock);
+  chat.setVisible(joined);
+  chat.setPlayers(s.players, net.pid);
 
-  renderLobby(s, mine);
-  renderHUD(s, mine, hours);
-  renderBriefing(s);
-  renderStandup(s);
-  renderRetro(s, mine);
-  renderResults(s, mine);
-  renderFrozen(mine);
+  const myId = net.pid;
+  P.renderLobby(s, mine, joined, myId);
+  P.renderBriefing(s, joined);
+  P.renderMorning(s, joined, myId);
+  P.renderEvening(s, joined);
+  P.renderMeeting(s, joined, myId);
+  P.renderDeploy(s, joined);
+  P.renderRetro(s, joined, myId);
+  P.renderResults(s, joined, mine, myId);
+  P.renderFrozen(s, joined, mine);
+  P.renderBoard(s, myId, boardOpen);
+  renderHUD(s, mine);
   mg.onState(s, mine);
 }
 
 function onPhaseChange(phase) {
   lastPhase = phase;
-  mg.close(true);
+  mg.close();
   moveTarget = null;
+  holding = false;
+  if (phase !== 'playing' && phase !== 'deploy') boardOpen = false;
   if (phase === 'briefing') sfx('win');
-  if (phase === 'retro') sfx('alarm');
+  if (phase === 'retro') { P.resetPeer(); sfx('alarm'); }
   if (phase === 'results') sfx(['shipped', 'onfire'].includes(state.results?.ending) ? 'win' : 'bad');
 }
 
-function renderLobby(s, mine) {
-  const on = joined && s.phase === 'lobby';
-  show($('#lobby-panel'), on);
-  if (!on) return;
-  const list = s.players.map((p) => `<li><i style="background:${p.color}"></i>${escapeHtml(p.name)}${p.isHost ? ` <b class="host">${t('host')}</b>` : ''}${p.id === myId ? ' 👈' : ''}</li>`).join('');
-  setHTML($('#lobby-panel'), `
-    <div class="room-code"><small>${t('roomCode')}</small><b>${escapeHtml(s.code)}</b>
-      <button class="copy" id="btn-copy">${t('copyLink')}</button></div>
-    <h2>${t('lobbyPlayers', { n: s.players.length })}</h2>
-    <ul class="plist">${list}</ul>
-    <p class="muted">${t('recommend')}</p>
-    ${mine?.isHost ? `<button class="btn primary" id="btn-start">${t('start')}</button>` : `<p class="waiting">${t('waiting')}</p>`}`);
+// What should *I* do next? Answers the "I don't know what to do" problem.
+// A stage is mine if my role owns it, nobody's role does, or the ticket escalated to anyone.
+function canDoTicket(s, stage) {
+  const role = s.me?.role;
+  const owned = !s.stageRole[stage] || s.stageRole[stage] === role;
+  return owned || s.tickets.some((x) => x.stage === stage && x.open);
+}
+function stageTicket(s, stage) {
+  const role = s.me?.role;
+  const owned = !s.stageRole[stage] || s.stageRole[stage] === role;
+  return s.tickets.find((x) => x.stage === stage && (owned || x.open));
 }
 
-function renderHUD(s, mine, hours) {
-  const playing = s.phase === 'playing' && joined;
-  show($('#topbar'), playing || s.phase === 'standup');
-  show($('#players'), playing);
-  show($('#bottombar'), playing || (joined && s.phase === 'lobby'));
-  show($('#help'), joined && (s.phase === 'lobby' || s.phase === 'playing'));
-  if (!(playing || s.phase === 'standup')) return;
+function myHint(s, mine) {
+  if (s.phase === 'deploy') return t('hint_deploy');
+  const can = (stage) => canDoTicket(s, stage);
+  const tk = (stage) => stageTicket(s, stage);
+  const p = { ticket: '' };
+  if (tk('review') && can('review') && s.stageRole.review) return t('hint_review', { ticket: tkName(tk('review')) });
+  if (tk('qa') && can('qa') && s.stageRole.qa) return t('hint_qa', { ticket: tkName(tk('qa')) });
+  if (tk('demo') && can('demo') && s.stageRole.demo) return t('hint_demo', { ticket: tkName(tk('demo')) });
+  const own = s.tickets.find((x) => x.stage === 'dev' && x.owner === mine.id);
+  if (own) return t('hint_code', { ticket: tkName(own), p: own.progress, w: own.work });
+  for (const st of ['review', 'qa', 'demo']) if (tk(st) && can(st)) return t(`hint_${st}`, { ticket: tkName(tk(st)) });
+  if (s.tickets.some((x) => x.stage === 'todo')) return t('hint_claim');
+  const dev = s.tickets.find((x) => x.stage === 'dev');
+  if (dev) return t('hint_help', { ticket: tkName(dev) });
+  if (s.prodBugs > 0) return t('hint_bugs');
+  return t('hint_idle', p);
+}
 
-  const hh = Math.floor(hours);
-  const mm = Math.floor((hours % 1) * 60);
-  $('#hud-day').textContent = t(`day${s.day}`);
+function renderHUD(s, mine) {
+  const working = joined && (s.phase === 'playing' || s.phase === 'deploy');
+  show($('#topbar'), working || (joined && ['morning', 'meeting', 'evening'].includes(s.phase)));
+  show($('#players'), working || (joined && s.phase === 'meeting'));
+  show($('#bottombar'), working || (joined && s.phase === 'lobby'));
+  show($('#help'), joined && (s.phase === 'lobby' || s.phase === 'playing'));
+  show($('#hint'), working && !!mine && !mine.frozen);
+  show($('#btn-board'), working);
+  if (!joined || s.phase === 'lobby') return;
+
+  const hh = Math.floor(s.clock);
+  const mm = Math.floor((s.clock % 1) * 60);
+  $('#hud-day').textContent = s.day ? `${t(`day${s.day}`)} · ${t(`theme${s.day}`)}` : '';
   $('#hud-clock').textContent = `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
-  $('#hud-clock').classList.toggle('late', s.day === 5 && hours >= 16);
-  const pct = Math.round((s.work / s.scope) * 100);
-  $('#hud-progress').style.width = `${clamp(pct, 0, 100)}%`;
-  $('#hud-progress-t').textContent = `${pct}%`;
-  $('#hud-bugs').textContent = `${s.bugs}`;
-  $('#hud-bugs').parentElement.classList.toggle('danger', s.bugs > s.cleanBugs);
+  $('#hud-clock').classList.toggle('late', s.day === 5 && s.clock >= 15);
+  const done = s.tickets.filter((x) => x.stage === 'done').length;
+  $('#hud-tickets').textContent = `${done}/${s.tickets.length}`;
+  $('#hud-prod').textContent = `${s.prodBugs}`;
+  $('#hud-prod').parentElement.classList.toggle('danger', s.prodBugs > s.players.length);
   $('#hud-client').style.width = `${s.happiness}%`;
   $('#hud-client').classList.toggle('low', s.happiness < 30);
   $('#hud-client-t').textContent = s.happiness < 30 ? '😡' : s.happiness < 60 ? '😐' : '😊';
   const chips = [];
+  if (s.me?.pip) chips.push(`<span class="chip red">${t('hud_pip')}</span>`);
   if (s.fire) chips.push(`<span class="chip red">${t('hud_fire')}</span>`);
   if (s.coffeeBroken) chips.push(`<span class="chip">${t('hud_coffee')}</span>`);
   if (s.review) chips.push(`<span class="chip green">${t('hud_review', { s: secs(s.review) })}</span>`);
   if (s.wifi) chips.push(`<span class="chip">${t('hud_wifi', { s: secs(s.wifi) })}</span>`);
   if (s.ceo) chips.push(`<span class="chip gold">${t('hud_ceo', { s: secs(s.ceo) })}</span>`);
   setHTML($('#hud-chips'), chips.join(''));
+  if (mine) $('#hint').textContent = myHint(s, mine);
 
   setHTML($('#players'), s.players.map((p) => {
     const st = p.frozen ? t(`st_${p.frozen}`) : '';
     const col = p.stress >= 80 ? '#ff6b6b' : p.stress >= 50 ? '#fcc419' : '#51cf66';
-    return `<div class="pl${p.id === myId ? ' me' : ''}"><i style="background:${p.color}"></i>
-      <span class="pl-name">${p.role ? ROLE_ICON[p.role] : ''} ${escapeHtml(p.name)} ${st}</span>
+    return `<div class="pl${p.id === net.pid ? ' me' : ''}"><i style="background:${p.color}"></i>
+      <span class="pl-name">${p.role ? ROLE_ICON[p.role] : ''} ${escapeHtml(p.name)} ${st}${p.pip ? ' 📉' : ''}</span>
       <div class="stress"><div style="width:${p.stress}%;background:${col}"></div></div></div>`;
   }).join(''));
 
   const ab = $('#btn-ability');
-  show(ab, playing && !!mine?.role);
+  show(ab, working && !!mine?.role);
   if (mine?.role) {
+    const blocked = s.me?.pip || (mine.role === 'manager' && s.emergencyUsed);
     ab.querySelector('.lbl').textContent = `Q · ${t(`ab_${mine.role}`)}${mine.cd ? ` (${secs(mine.cd)})` : ''}`;
-    ab.querySelector('.cd').style.width = `${(mine.cd / mine.cdMax) * 100}%`;
-    ab.classList.toggle('ready', !mine.cd && !mine.frozen);
+    ab.querySelector('.cd').style.width = blocked ? '100%' : `${(mine.cd / mine.cdMax) * 100}%`;
+    ab.classList.toggle('ready', !mine.cd && !mine.frozen && !blocked);
   }
-}
-
-function renderBriefing(s) {
-  const on = s.phase === 'briefing' && joined;
-  show($('#briefing'), on);
-  if (!on || !priv) return;
-  setHTML($('#briefing'), `<div class="card wide">
-    <p class="mission">${t('brief_mission')}</p>
-    <div class="cards">
-      <div class="rcard role"><small>${t('brief_role')}</small><div class="big">${ROLE_ICON[priv.role]}</div>
-        <h3>${t(`role_${priv.role}`)}</h3><p>${t(`rdesc_${priv.role}`)}</p></div>
-      <div class="rcard agenda${priv.agenda === 'jobhunt' ? ' evil' : ''}"><small>${t('brief_agenda')}</small><div class="big">🤫</div>
-        <h3>${t(`ag_${priv.agenda}`)}</h3><p>${t(`agd_${priv.agenda}`)}</p></div>
-    </div>
-    <p class="countdown">${t('brief_starts', { s: secs(s.left) })}</p></div>`);
-}
-
-function renderStandup(s) {
-  const on = s.phase === 'standup' && joined;
-  show($('#standup'), on);
-  if (!on) return;
-  setHTML($('#standup'), `<div class="card">
-    <h2>${t('standup_title', { day: `@day${s.day}` })}</h2>
-    <div class="stats">
-      <div><b>${Math.round((s.work / s.scope) * 100)}%</b><small>${t('hud_progress')}</small></div>
-      <div><b>🐛 ${s.bugs}</b><small>${t('hud_bugs')}</small></div>
-      <div><b>${s.happiness}</b><small>${t('hud_client')}</small></div>
-    </div>
-    <h3>${t('standup_next', { day: `@day${s.day + 1}` })} · ${secs(s.left)}s</h3>
-    <p class="muted">${s.day + 1 === 5 ? t('deadline') : t('standup_tip')}</p></div>`);
-}
-
-function renderRetro(s, mine) {
-  const on = s.phase === 'retro' && joined;
-  show($('#retro'), on);
-  if (!on) return;
-  const others = s.players.filter((p) => p.id !== myId);
-  const myVote = mine?.voted;
-  const buttons = others.length
-    ? others.map((p) => `<button class="vote" data-vote="${p.id}" ${myVote ? 'disabled' : ''}>
-        <i style="background:${p.color}"></i>${ROLE_ICON[p.role] || ''} ${escapeHtml(p.name)}${p.voted ? ' <small>✓</small>' : ''}</button>`).join('')
-    : `<p>${t('retro_solo')}</p>`;
-  setHTML($('#retro .retro-body'), `<h2>${t('retro_title')}</h2><p>${t('retro_sub')}</p>
-    <div class="votes">${buttons}</div>${myVote ? `<p class="muted">${t('retro_voted')}</p>` : ''}`);
-  $('#retro .retro-left').textContent = t('retro_left', { s: secs(s.left) });
-}
-
-function renderResults(s, mine) {
-  const on = s.phase === 'results' && joined && s.results;
-  show($('#results'), !!on);
-  if (!on) return;
-  const r = s.results;
-  const blamed = r.blamed.map((id) => r.players.find((p) => p.id === id)?.name).filter(Boolean).map(escapeHtml).join(', ');
-  const rows = r.players.map((p) => `<tr${p.id === myId ? ' class="me"' : ''}>
-      <td><i style="background:${p.color}"></i>${escapeHtml(p.name)}</td>
-      <td>${ROLE_ICON[p.role]} ${t(`role_${p.role}`)}</td>
-      <td>${t(`ag_${p.agenda}`)}</td>
-      <td>${p.won ? t('res_win') : t('res_lose')}</td>
-      <td>${p.contribution}</td></tr>`).join('');
-  setHTML($('#results'), `<div class="card wide">
-    <h1 class="ending ${r.ending}">${t(`end_${r.ending}`)}</h1>
-    <p class="lead">${t(`endd_${r.ending}`, { bugs: r.bugs, pct: r.pct, burn: r.burnouts })}</p>
-    <p>${blamed ? t('res_mostBlamed', { name: blamed }) : t('res_noBlame')}</p>
-    <div class="table-wrap"><table><thead><tr><th>${t('res_player')}</th><th>${t('res_role')}</th><th>${t('res_agenda')}</th>
-      <th>${t('res_result')}</th><th>${t('res_contrib')}</th></tr></thead><tbody>${rows}</tbody></table></div>
-    ${mine?.isHost ? `<button class="btn primary" id="btn-restart">${t('playAgain')}</button>` : `<p class="muted">${t('waitHost')}</p>`}</div>`);
-}
-
-function renderFrozen(mine) {
-  const el = $('#frozen');
-  const f = joined && state.phase === 'playing' && mine?.frozen;
-  show(el, !!f);
-  el.className = f ? `frozen ${f}` : 'hidden';
-  if (!f) return;
-  const s = secs(mine.frozenLeft);
-  if (f === 'locked') {
-    const p = Math.min(99, Math.round((1 - mine.frozenLeft / 10000) * 100));
-    setHTML(el, `<div class="spinner"></div><h2>${t('frz_locked', { p })}</h2><p>${t('frz_locked2', { s })}</p>`);
-  } else {
-    setHTML(el, `<h2>${t(`frz_${f}`, { s })}</h2>`);
+  const sec = $('#btn-secret');
+  const hasSecret = s.me && s.me.secret !== null && s.me.secret !== undefined;
+  show(sec, working && hasSecret);
+  if (hasSecret) {
+    sec.querySelector('.lbl').textContent = `${t(`sec_btn_${s.me.agenda}`)}${s.me.secret ? ` (${secs(s.me.secret)})` : ''}`;
+    sec.querySelector('.cd').style.width = s.me.pip ? '100%' : `${(s.me.secret / s.me.secretMax) * 100}%`;
+    sec.classList.toggle('ready', !s.me.secret && !mine.frozen && !s.me.pip);
   }
 }
 
 // ---------- Interaction ----------
-function actionFor(st, mine) {
+function actionFor(st) {
+  const s = state;
+  const can = (stage) => canDoTicket(s, stage);
+  const tk = (stage) => stageTicket(s, stage);
+  if (s.phase === 'deploy') {
+    if (st.type === 'server' && s.fire) return 'fire';
+    return DEPLOY_STATIONS.includes(st.id) ? 'hold' : null;
+  }
   switch (st.type) {
     case 'desk': return 'code';
-    case 'bugs': return 'bugs';
-    case 'coffee': return state.coffeeBroken ? 'fixCoffee' : 'coffee';
-    case 'server': return state.fire ? 'fire' : null;
-    case 'phone': return state.phone ? 'phone' : null;
-    case 'meeting': return state.pizza > 0 && !mine.ateP ? 'pizza' : null;
+    case 'board': return tk('review') && can('review') ? 'review' : 'board';
+    case 'qa': return tk('qa') && can('qa') ? 'qa' : 'bugsProd';
+    case 'coffee': return s.coffeeBroken ? 'fixCoffee' : 'coffee';
+    case 'server': return s.fire ? 'fire' : null;
+    case 'phone': return s.phone ? 'phone' : tk('demo') && can('demo') ? 'demo' : null;
+    case 'meeting': return s.pizza > 0 && !myState()?.ateP ? 'pizza' : null;
     case 'exit': return 'exit';
     default: return null;
   }
 }
 function detectAction(mine) {
-  if (!state || state.phase !== 'playing' || !mine || !joined) return null;
+  if (!state || !['playing', 'deploy'].includes(state.phase) || !mine || !joined) return null;
   let best = null;
   let bestD = Infinity;
   for (const st of world.stations) {
     const d = Math.hypot(me.x - st.x, me.z - st.z);
     const range = st.type === 'meeting' ? 2.8 : 2.2;
     if (d > range || d >= bestD) continue;
-    const act = actionFor(st, mine);
+    const act = actionFor(st);
     if (act) { best = { st, act }; bestD = d; }
   }
   return best;
 }
-const ACT_LABEL = { code: 'act_code', bugs: 'act_bugs', coffee: 'act_coffee', fixCoffee: 'act_fixCoffee', fire: 'act_fire', phone: 'act_phone', pizza: 'act_pizza', exit: 'hint_exit' };
+const ACT_LABEL = {
+  code: 'act_code', review: 'act_review', qa: 'act_qa', bugsProd: 'act_bugsProd', demo: 'act_demo', board: 'act_board', hold: 'act_hold',
+  coffee: 'act_coffee', fixCoffee: 'act_fixCoffee', fire: 'act_fire', phone: 'act_phone', pizza: 'act_pizza', exit: 'hint_exit',
+};
 function renderAction(mine) {
   const btn = $('#btn-action');
   const on = !!action && !mine?.frozen && !mg.isOpen();
   show(btn, on);
-  if (!on) return;
+  if (!on) { holding = false; return; }
   const label = action.act === 'exit' ? t('hint_exit') : `${t(ACT_LABEL[action.act])}  [E]`;
   if (btn.textContent !== label) btn.textContent = label;
   btn.classList.toggle('hint', action.act === 'exit');
-  btn.classList.toggle('urgent', ['fire', 'phone', 'fixCoffee', 'pizza'].includes(action.act));
+  btn.classList.toggle('urgent', ['fire', 'phone', 'fixCoffee', 'pizza', 'review', 'qa', 'demo'].includes(action.act));
+  btn.classList.toggle('holding', action.act === 'hold' && holding);
 }
 function interact() {
   const mine = myState();
@@ -384,21 +356,34 @@ function interact() {
   keys.clear();
   moveTarget = null;
   me.moving = false;
+  const s = state;
+  const tk = (stage) => stageTicket(s, stage);
   switch (action.act) {
-    case 'exit': return;
+    case 'exit': case 'hold': return;
+    case 'board': return setBoard(!boardOpen);
     case 'pizza':
       emit('task', { type: 'pizza' });
       toast(t('pizzaYum'), 'good');
-      sfx('good');
-      return;
-    default:
-      mg.open(action.act, { q: state.phone?.q });
+      return sfx('good');
+    case 'code': {
+      const devs = s.tickets.filter((x) => x.stage === 'dev');
+      return mg.open('code', { tickets: devs, preferred: devs.find((x) => x.owner === net.pid)?.id });
+    }
+    case 'review': return mg.open('review', { ticket: tk('review') });
+    case 'qa': return mg.open('qa', { ticket: tk('qa') });
+    case 'demo': return mg.open('demo', { ticket: tk('demo') });
+    default: return mg.open(action.act, { q: s.phone?.q });
   }
 }
 function useAbility() {
   const mine = myState();
-  if (!mine || !mine.role || mine.cd || mine.frozen || state.phase !== 'playing') return;
+  if (!mine || !mine.role || mine.cd || mine.frozen || !['playing', 'deploy'].includes(state.phase)) return;
   emit('ability');
+}
+function useSecret() {
+  const mine = myState();
+  if (!mine || !state.me || state.me.secret === null || state.me.secret || mine.frozen) return;
+  emit('secret');
 }
 
 // ---------- Movement ----------
@@ -430,7 +415,7 @@ function collide(x, z) {
   return [x, z];
 }
 function updateMovement(dt, mine) {
-  const canMove = joined && mine && !mine.frozen && !mg.isOpen() && (state.phase === 'lobby' || state.phase === 'playing');
+  const canMove = joined && mine && !mine.frozen && !mg.isOpen() && !typing && ['lobby', 'playing', 'deploy'].includes(state.phase);
   let dx = 0;
   let dz = 0;
   if (canMove) {
@@ -451,6 +436,7 @@ function updateMovement(dt, mine) {
   const len = Math.hypot(dx, dz);
   me.moving = len > 0;
   if (me.moving) {
+    holding = false;
     const speed = mine.stress >= 80 ? 3.4 : 4.6;
     const step = Math.min(speed * dt, moveTarget ? len : Infinity);
     const [nx, nz] = collide(me.x + (dx / len) * step, me.z + (dz / len) * step);
@@ -460,6 +446,7 @@ function updateMovement(dt, mine) {
     me.face = Math.atan2(dx, dz);
   }
   if (joined) net.pos = { x: me.x, z: me.z, face: me.face, moving: me.moving }; // sent with the next sync
+  net.hold = holding && action?.act === 'hold' ? action.st.id : null;
 }
 
 // ---------- Main loop ----------
@@ -470,7 +457,7 @@ function loop(now) {
   if (office && state && world) {
     const mine = myState();
     updateMovement(dt, mine);
-    const ch = office.chars.get(myId);
+    const ch = office.chars.get(net.pid);
     if (ch && joined) {
       ch.x = ch.tx = me.x;
       ch.z = ch.tz = me.z;
@@ -491,8 +478,8 @@ requestAnimationFrame(loop);
 // ---------- Input wiring ----------
 const MOVE_KEYS = ['arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'w', 'a', 's', 'd'];
 window.addEventListener('keydown', (e) => {
-  if (e.target.tagName === 'INPUT') {
-    if (e.key === 'Enter') { if (e.target.id === 'join-code' && e.target.value) joinRoom(); else createRoom(); }
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') {
+    if (e.key === 'Enter' && e.target.closest('#join')) { if (e.target.id === 'join-code' && e.target.value) joinRoom(); else createRoom(); }
     return;
   }
   if (mg.isOpen()) {
@@ -500,25 +487,60 @@ window.addEventListener('keydown', (e) => {
     return;
   }
   const k = e.key.toLowerCase();
+  if (k === 'enter' && joined) { e.preventDefault(); chat.focus(); return; }
+  if (k === 'escape' && boardOpen) return setBoard(false);
   if (MOVE_KEYS.includes(k)) { keys.add(k); e.preventDefault(); }
-  else if (k === 'e' || k === ' ') { e.preventDefault(); if (!e.repeat) interact(); }
+  else if (k === 'e' || k === ' ') {
+    e.preventDefault();
+    if (action?.act === 'hold') holding = true;
+    else if (!e.repeat) interact();
+  }
   else if (k === 'q') useAbility();
+  else if (k === 'f') useSecret();
+  else if (k === 'b' && joined && ['playing', 'deploy'].includes(state?.phase)) setBoard(!boardOpen);
   else if (/^[1-5]$/.test(k) && joined) emit('emote', Number(k) - 1);
 });
-window.addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
-window.addEventListener('blur', () => keys.clear());
+window.addEventListener('keyup', (e) => {
+  const k = e.key.toLowerCase();
+  keys.delete(k);
+  if (k === 'e' || k === ' ') holding = false;
+});
+window.addEventListener('blur', () => { keys.clear(); holding = false; });
 
 $('#game').addEventListener('pointerdown', (e) => {
-  if (!office || !joined || !state || !['lobby', 'playing'].includes(state.phase)) return;
+  if (!office || !joined || !state || !['lobby', 'playing', 'deploy'].includes(state.phase)) return;
   const hit = office.pickFloor(e.clientX, e.clientY);
   if (hit) moveTarget = { x: hit.x, z: hit.z };
 });
 
+// Deploy: press-and-hold the action button
+const actionBtn = $('#btn-action');
+actionBtn.addEventListener('pointerdown', (e) => {
+  if (action?.act === 'hold') { e.preventDefault(); holding = true; }
+});
+for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) actionBtn.addEventListener(ev, () => { holding = false; });
+actionBtn.addEventListener('click', () => { if (action?.act !== 'hold') interact(); });
+
+// Board cards re-render with live timers, so claim on pointerdown rather than click.
+document.addEventListener('pointerdown', (e) => {
+  const claim = e.target.closest('[data-claim]');
+  if (claim) { e.preventDefault(); emit('claim', { ticket: Number(claim.dataset.claim) }); sfx('ok'); }
+});
 document.addEventListener('click', (e) => {
-  const vote = e.target.closest('[data-vote]');
-  if (vote) { emit('vote', vote.dataset.vote); sfx('ok'); return; }
+  const mvote = e.target.closest('[data-mvote]');
+  if (mvote && !mvote.disabled) { emit('vote', { target: mvote.dataset.mvote }); sfx('ok'); return; }
+  const peer = e.target.closest('[data-peer]');
+  if (peer && !peer.disabled) {
+    const [kind, id] = peer.dataset.peer.split(':');
+    if (kind === 'submit') emit('peer', P.peerPayload());
+    else P.peerAction(kind, id);
+    sfx('tick');
+    if (state) P.renderRetro(state, joined, net.pid);
+    return;
+  }
   if (e.target.closest('#btn-start')) emit('start');
   if (e.target.closest('#btn-restart')) emit('restart');
+  if (e.target.closest('#btn-board') || e.target.closest('#board .board-close')) setBoard(!boardOpen);
   if (e.target.closest('#btn-copy')) {
     const link = `${location.origin}${location.pathname}?room=${state?.code || ''}`;
     navigator.clipboard?.writeText(link).then(() => toast(t('copied'), 'good'), () => toast(link));
@@ -526,8 +548,8 @@ document.addEventListener('click', (e) => {
 });
 $('#btn-create').addEventListener('click', createRoom);
 $('#btn-join').addEventListener('click', joinRoom);
-$('#btn-action').addEventListener('click', interact);
 $('#btn-ability').addEventListener('click', useAbility);
+$('#btn-secret').addEventListener('click', useSecret);
 $('#btn-lang').addEventListener('click', () => {
   setLang(getLang() === 'en' ? 'mm' : 'en');
   applyStaticText();
@@ -553,6 +575,7 @@ if (roomParam) $('#join-code').value = roomParam.toUpperCase();
 setLang(getLang());
 applyStaticText();
 renderEmotes();
+chat.setVisible(false);
 
 fetch('/world.json').then((r) => r.json()).then((w) => {
   world = w;
