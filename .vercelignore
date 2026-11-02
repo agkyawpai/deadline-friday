@@ -1,0 +1,4 @@
+# server.js is the LAN-only Express server; on Vercel, /api/sync.js serves the API and public/ is static.
+server.js
+node_modules
+.env*

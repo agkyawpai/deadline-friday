@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Deadline: Friday 5PM</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔥</text></svg>">
+  <link rel="stylesheet" href="style.css">
+  <script type="importmap">{ "imports": { "three": "/vendor/three.module.min.js" } }</script>
+</head>
+<body>
+  <div id="game"></div>
+
+  <div id="topbar" class="hidden">
+    <div class="tb-day"><b id="hud-day"></b><span id="hud-clock"></span></div>
+    <div class="tb-meter"><label data-i18n="hud_progress"></label><div class="bar"><div id="hud-progress" class="fill prog"></div></div><span id="hud-progress-t"></span></div>
+    <div class="tb-stat">🐛 <span id="hud-bugs"></span></div>
+    <div class="tb-meter"><label data-i18n="hud_client"></label><div class="bar"><div id="hud-client" class="fill client"></div></div><span id="hud-client-t"></span></div>
+    <div id="hud-chips"></div>
+  </div>
+
+  <div id="players" class="hidden"></div>
+  <div id="toasts"></div>
+  <div id="corner"><button id="btn-lang"></button><button id="btn-mute">🔊</button></div>
+
+  <div id="bottombar" class="hidden">
+    <button id="btn-action" class="hidden"></button>
+    <div class="row">
+      <div id="emotes"></div>
+      <button id="btn-ability" class="hidden"><span class="cd"></span><span class="lbl"></span></button>
+    </div>
+  </div>
+  <div id="help" class="hidden" data-i18n="controls"></div>
+
+  <div id="join" class="overlay">
+    <div class="card">
+      <div class="logo">🔥💻☕</div>
+      <h1 data-i18n="title"></h1>
+      <p class="muted" data-i18n="subtitle"></p>
+      <input id="join-name" maxlength="14" autocomplete="off" data-i18n-ph="yourName">
+      <button id="btn-create" class="btn primary" data-i18n="createRoom"></button>
+      <div class="or" data-i18n="or"></div>
+      <div class="join-row">
+        <input id="join-code" maxlength="6" autocomplete="off" data-i18n-ph="roomCodePh">
+        <button id="btn-join" class="btn" data-i18n="joinRoom"></button>
+      </div>
+      <p id="join-err" class="err"></p>
+    </div>
+  </div>
+  <div id="lobby-panel" class="panel hidden"></div>
+
+  <div id="briefing" class="overlay hidden"></div>
+  <div id="standup" class="overlay hidden"></div>
+  <div id="retro" class="overlay hidden"><div class="card"><div class="retro-left"></div><div class="retro-body"></div></div></div>
+  <div id="results" class="overlay hidden"></div>
+  <div id="frozen" class="hidden"></div>
+  <div id="modal" class="hidden"></div>
+
+  <script src="/vendor/gsap.min.js"></script>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

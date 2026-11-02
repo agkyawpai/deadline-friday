@@ -1,0 +1,17 @@
+{
+  "name": "deadline-friday",
+  "version": "0.2.0",
+  "description": "Deadline: Friday 5PM - lightweight multiplayer IT corporate chaos game (max 6 players). LAN or Vercel + Upstash Redis.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@upstash/redis": "1.40.0",
+    "express": "4.19.2"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
