@@ -1,7 +1,11 @@
 # 🔥 Deadline: Friday 5PM
 
-A lightweight LAN multiplayer **IT corporate chaos** game for 1–6 players (3D in the browser).
+A lightweight multiplayer **IT corporate chaos** game for 1–6 players (3D in the browser). Play online or on a LAN.
 Ship the "AI-powered Blockchain Food Delivery Super-App" by Friday 5PM while the office falls apart.
+
+**▶ Play: https://deadline-friday.vercel.app** — create an office, share the room code, and press Start Sprint.
+
+Every push to `main` auto-deploys to Vercel.
 
 ## Run (LAN)
 
