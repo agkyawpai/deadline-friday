@@ -17,23 +17,16 @@ export const tkName = (tk) => `${TICKET_ICON[tk.key] || '🎫'} ${t(`tk_${tk.key
 
 // ---------- Sprint board ----------
 function ticketCard(s, tk, myId) {
-  const role = s.stageRole[tk.stage];
-  const who = role ? `${ROLE_ICON[role]} ${t(`role_${role}`)}` : t('anyone');
   const lines = [];
   if (tk.stage === 'dev') {
     lines.push(`<div class="tk-bar"><div style="width:${(tk.progress / tk.work) * 100}%"></div></div>`);
-    lines.push(`<small>${tk.owner ? t('by', { name: nameOf(s, tk.owner) }) : t('unclaimed')}${tk.helpers.length ? ` +${tk.helpers.map(escapeHtml).join(', ')}` : ''}</small>`);
+    lines.push(`<small>${tk.owner ? t('by', { name: nameOf(s, tk.owner) }) : t('unclaimed')}</small>`);
   }
-  if (['review', 'qa', 'demo'].includes(tk.stage)) {
-    lines.push(tk.open || !role
-      ? `<small class="needs open">🔓 ${t('needs', { role: t('anyone') })}</small>`
-      : `<small class="needs">⏳ ${t('needs', { role: who })} · ${t('escIn', { s: Math.ceil(tk.escIn / 1000) })}</small>`);
-  }
-  if (tk.stage === 'done') lines.push(`<small>${['dev', 'review', 'qa', 'demo'].filter((k) => tk.credits[k]).map((k) => `${t(`stage_${k}`)}: ${escapeHtml(tk.credits[k])}`).join(' · ')}</small>`);
+  if (tk.stage === 'qa') lines.push(`<small class="needs">⏳ ${t('needs_tester')} · ${t('by', { name: nameOf(s, tk.owner) })}</small>`);
+  if (tk.stage === 'done') lines.push(`<small>${escapeHtml(t('credit_line', { code: tk.credits.code || '?', test: tk.credits.test || '?' }))}</small>`);
   const canClaim = ['morning', 'playing'].includes(s.phase) && (tk.stage === 'todo' || (tk.stage === 'dev' && !tk.owner));
-  const overdue = tk.stage !== 'done' && tk.day < s.day ? `<b class="overdue">${t('overdue')}</b>` : '';
-  const mine = tk.owner === myId && tk.stage === 'dev' ? ' mine' : '';
-  return `<div class="tk${mine}"><div class="tk-name">${tkName(tk)} ${overdue}</div>${lines.join('')}
+  const mine = tk.owner === myId && tk.stage !== 'done' ? ' mine' : '';
+  return `<div class="tk${mine}"><div class="tk-name">${tkName(tk)}</div>${lines.join('')}
     ${canClaim ? `<button class="tk-claim" data-claim="${tk.id}">${t('claim')}</button>` : ''}</div>`;
 }
 export function boardHtml(s, myId) {
@@ -59,6 +52,7 @@ export function renderLobby(s, mine, joined, myId) {
       <button class="copy" id="btn-copy">${t('copyLink')}</button></div>
     <h2>${t('lobbyPlayers', { n: s.players.length })}</h2>
     <ul class="plist">${list}</ul>
+    ${s.players.length < 4 ? `<p class="bots-note">${t('lobby_bots', { n: 4 - s.players.length })}</p>` : ''}
     <p class="muted">${t('recommend')}</p>
     ${mine?.isHost ? `<button class="btn primary" id="btn-start">${t('start')}</button>` : `<p class="waiting">${t('waiting')}</p>`}`);
 }
@@ -68,14 +62,17 @@ export function renderBriefing(s, joined) {
   show($('#briefing'), !!on);
   if (!on) return;
   const { role, agenda } = s.me;
+  const evil = agenda === 'jobhunt';
   setHTML($('#briefing'), `<div class="card wide">
     <p class="mission">${t('brief_mission')}</p>
     <div class="cards">
       <div class="rcard role"><small>${t('brief_role')}</small><div class="big">${ROLE_ICON[role]}</div>
         <h3>${t(`role_${role}`)}</h3><p>${t(`rdesc_${role}`)}</p></div>
-      <div class="rcard agenda${agenda === 'jobhunt' ? ' evil' : ''}"><small>${t('brief_agenda')}</small><div class="big">🤫</div>
+      <div class="rcard agenda${evil ? ' evil' : ''}"><small>${t('brief_agenda')}</small>
         <h3>${t(`ag_${agenda}`)}</h3><p>${t(`agd_${agenda}`)}</p></div>
     </div>
+    <p class="win-line">${t(evil ? 'brief_win_evil' : 'brief_win_team')}</p>
+    <p class="muted">${t('brief_tip')}</p>
     <p class="countdown">${t('brief_starts', { s: secs(s.left) })}</p></div>`);
 }
 
@@ -84,8 +81,8 @@ export function renderMorning(s, joined, myId) {
   const on = s.phase === 'morning' && joined;
   show($('#morning'), on);
   if (!on) return;
-  setHTML($('#morning .m-head'), `<h2>${t('morning_title', { day: `@day${s.day}`, theme: `@theme${s.day}` })}</h2>
-    <p class="muted">${t(`themed${s.day}`)}</p><p>${t('morning_claim')}</p>`);
+  setHTML($('#morning .m-head'), `<h2>${t('morning_title', { day: `@day${s.day}` })}</h2>
+    ${s.day === 5 ? `<p class="win-line">${t('day5_note')}</p>` : ''}<p>${t('morning_claim')}</p>`);
   setHTML($('#morning .m-board'), boardHtml(s, myId));
   $('#morning .m-left').textContent = t('morning_starts', { s: secs(s.left) });
 }
@@ -95,16 +92,16 @@ export function renderEvening(s, joined) {
   show($('#evening'), !!on);
   if (!on) return;
   const sm = s.summary;
+  const done = s.tickets.filter((x) => x.stage === 'done').length;
   setHTML($('#evening'), `<div class="card">
     <h2>${t('evening_title', { day: `@day${sm.day}` })}</h2>
     <div class="stats">
       <div><b>✅ ${sm.doneToday}</b><small>${t('evening_done')}</small></div>
-      <div><b>⏰ ${sm.overdue}</b><small>${t('evening_overdue')}</small></div>
+      <div><b>🎫 ${done}/${s.tickets.length}</b><small>${t('evening_total')}</small></div>
       <div><b>${s.happiness}</b><small>${t('evening_client')}</small></div>
     </div>
-    ${sm.demo ? `<p class="${sm.demo > 0 ? 'good' : 'bad'}">${t(sm.demo > 0 ? 'evening_demo_good' : 'evening_demo_bad')}</p>` : ''}
-    <h3>${t('morning_title', { day: `@day${sm.day + 1}`, theme: `@theme${sm.day + 1}` })}</h3>
-    <p class="muted">${t(`themed${sm.day + 1}`)}</p></div>`);
+    <h3>${t('evening_next', { day: `@day${sm.day + 1}` })}</h3>
+    ${sm.day + 1 === 5 ? `<p class="win-line">${t('day5_note')}</p>` : ''}</div>`);
 }
 
 export function renderMeeting(s, joined, myId) {
@@ -113,20 +110,13 @@ export function renderMeeting(s, joined, myId) {
   if (!on) return;
   const m = s.meeting;
   const voted = m.myVote !== null;
-  let options;
-  if (m.kind === 'decision') {
-    options = `<p class="question">${t(`mt_q_${m.key}`)}</p>
-      <div class="votes"><button class="vote" data-mvote="yes" ${voted ? 'disabled' : ''}>${t('mt_yes')}</button>
-      <button class="vote" data-mvote="no" ${voted ? 'disabled' : ''}>${t('mt_no')}</button></div>`;
-  } else {
-    options = `<p class="muted small">${t('mt_pipInfo')}</p><div class="votes">${s.players.filter((p) => p.id !== myId).map((p) =>
-      `<button class="vote${m.myVote === p.id ? ' picked' : ''}" data-mvote="${p.id}" ${voted ? 'disabled' : ''}><i style="background:${p.color}"></i>${ROLE_ICON[p.role] || ''} ${escapeHtml(p.name)}${m.voted.includes(p.id) ? ' <small>✓</small>' : ''}</button>`).join('')}
-      <button class="vote skip" data-mvote="skip" ${voted ? 'disabled' : ''}>${t('mt_skip')}</button></div>`;
-  }
+  const buttons = s.players.filter((p) => p.id !== myId && !p.caught).map((p) =>
+    `<button class="vote${m.myVote === p.id ? ' picked' : ''}" data-mvote="${p.id}" ${voted ? 'disabled' : ''}><i style="background:${p.color}"></i>${ROLE_ICON[p.role] || ''} ${escapeHtml(p.name)}${m.voted.includes(p.id) ? ' <small>✓</small>' : ''}</button>`).join('');
   setHTML($('#meeting .mt-body'), `
-    <h2>${t(m.kind === 'decision' ? 'mt_title_decision' : 'mt_title_pip')}</h2>
+    <h2>${t('mt_title')}</h2>
     ${m.by ? `<p class="bad">${t('mt_emergency', { name: escapeHtml(m.by) })}</p>` : ''}
-    ${options}
+    <p class="muted small">${t('mt_info')}</p>
+    <div class="votes">${buttons}<button class="vote skip" data-mvote="skip" ${voted ? 'disabled' : ''}>${t('mt_skip')}</button></div>
     <p class="muted">${t('mt_voted', { n: m.voted.length, total: s.players.length })}${voted ? ` · ${t('mt_myVote')}` : ''}</p>`);
   $('#meeting .mt-left').textContent = t('mt_left', { s: secs(s.left) });
 }
@@ -143,71 +133,27 @@ export function renderDeploy(s, joined) {
     <small>${t('deploy_need', { o: d.occupied.length, n: d.need })}</small></div>`);
 }
 
-// ---------- Retro: peer review ----------
-let peer = { points: {}, blame: null };
-export function resetPeer() { peer = { points: {}, blame: null }; }
-export function peerAction(kind, id) {
-  const used = Object.values(peer.points).reduce((a, b) => a + b, 0);
-  if (kind === 'plus' && used < 10) peer.points[id] = (peer.points[id] || 0) + 1;
-  if (kind === 'minus' && peer.points[id]) peer.points[id]--;
-  if (kind === 'blame') peer.blame = id;
-}
-export const peerPayload = () => ({ points: { ...peer.points }, target: peer.blame || undefined });
-
-export function renderRetro(s, joined, myId) {
-  const on = s.phase === 'retro' && joined;
-  show($('#retro'), on);
-  if (!on) return;
-  const others = s.players.filter((p) => p.id !== myId);
-  const used = Object.values(peer.points).reduce((a, b) => a + b, 0);
-  const done = s.me?.peerDone;
-  const rows = others.length ? others.map((p) => `<div class="peer-row">
-      <span class="pr-name"><i style="background:${p.color}"></i>${ROLE_ICON[p.role] || ''} ${escapeHtml(p.name)}${p.voted ? ' <small>✓</small>' : ''}</span>
-      <span class="pr-pts"><button data-peer="minus:${p.id}" ${done ? 'disabled' : ''}>−</button><b>${peer.points[p.id] || 0}</b><button data-peer="plus:${p.id}" ${done ? 'disabled' : ''}>+</button></span>
-      <button class="pr-blame${peer.blame === p.id ? ' on' : ''}" data-peer="blame:${p.id}" ${done ? 'disabled' : ''}>${t('retro_blame')}</button>
-    </div>`).join('') : `<p>${t('retro_solo')}</p>`;
-  setHTML($('#retro .retro-body'), `<h2>${t('retro_title')}</h2><p>${t('retro_sub')}</p>
-    <p class="pts-left">${t('retro_points', { n: 10 - used })}</p>
-    <div class="peer">${rows}</div>
-    ${done ? `<p class="muted">${t('retro_submitted')}</p>` : `<button class="btn primary" data-peer="submit:">${t('retro_submit')}</button>`}`);
-  $('#retro .retro-left').textContent = t('retro_left', { s: secs(s.left) });
-}
-
 export function renderResults(s, joined, mine, myId) {
   const on = s.phase === 'results' && joined && s.results;
   show($('#results'), !!on);
   if (!on) return;
   const r = s.results;
-  const blamed = r.blamed.map((id) => r.players.find((p) => p.id === id)?.name).filter(Boolean).map(escapeHtml).join(', ');
+  const hunter = r.players.find((p) => p.agenda === 'jobhunt');
   const rows = r.players.map((p) => `<tr${p.id === myId ? ' class="me"' : ''}>
       <td><i style="background:${p.color}"></i>${escapeHtml(p.name)}</td>
-      <td>${ROLE_ICON[p.role]} ${t(`role_${p.role}`)}</td>
+      <td>${ROLE_ICON[p.role] || ''} ${t(`role_${p.role}`)}</td>
       <td>${t(`ag_${p.agenda}`)}</td>
-      <td>${p.won ? t('res_win') : t('res_lose')}</td>
-      <td>💰 ${p.bonus}</td><td>🫵 ${p.votes}</td></tr>`).join('');
+      <td>${p.won ? t('res_win') : t('res_lose')}</td></tr>`).join('');
   const log = r.log.length
-    ? r.log.map((e) => `<li>${escapeHtml(t('res_log_row', { id: e.id, time: e.time, act: `@gitact_${e.act}`, actor: e.actor }))}${e.framed ? `<b class="bad">${escapeHtml(t('res_log_framed', { name: e.framed }))}</b>` : ''}</li>`).join('')
+    ? r.log.map((e) => `<li>${escapeHtml(t('res_log_row', { id: e.id, time: e.time, act: `@gitact_${e.act}`, actor: e.actor }))}</li>`).join('')
     : `<li>${t('res_log_none')}</li>`;
   setHTML($('#results'), `<div class="card wide">
     <h1 class="ending ${r.ending}">${t(`end_${r.ending}`)}</h1>
-    <p class="lead">${t(`endd_${r.ending}`, { done: r.done, total: r.total, bugs: r.prodBugs, burn: r.burnouts })}</p>
-    <p>${blamed ? t('res_mostBlamed', { name: blamed }) : t('res_noBlame')}</p>
-    <div class="table-wrap"><table><thead><tr><th>${t('res_player')}</th><th>${t('res_role')}</th><th>${t('res_agenda')}</th>
-      <th>${t('res_result')}</th><th>${t('res_bonus')}</th><th>${t('res_votes')}</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <p class="lead">${t(`endd_${r.ending}`, { done: r.done, total: r.total })}</p>
+    <p class="team-result ${r.shipped ? 'good' : 'bad'}">${t(r.shipped ? 'res_team_win' : 'res_team_lose')}</p>
+    ${hunter ? `<p class="hunter">${escapeHtml(t('res_hunter', { name: hunter.name }))}${t(hunter.caught ? 'res_hunter_caught' : 'res_hunter_free')}</p>` : ''}
+    <div class="table-wrap"><table><thead><tr><th>${t('res_player')}</th><th>${t('res_role')}</th><th>${t('res_side')}</th>
+      <th>${t('res_result')}</th></tr></thead><tbody>${rows}</tbody></table></div>
     <h3>${t('res_log')}</h3><ul class="gitlog">${log}</ul>
     ${mine?.isHost ? `<button class="btn primary" id="btn-restart">${t('playAgain')}</button>` : `<p class="muted">${t('waitHost')}</p>`}</div>`);
-}
-
-export function renderFrozen(s, joined, mine) {
-  const el = $('#frozen');
-  const f = joined && ['playing', 'deploy'].includes(s.phase) && mine?.frozen;
-  el.className = f ? `frozen ${f}` : 'hidden';
-  if (!f) return;
-  const sec = secs(mine.frozenLeft);
-  if (f === 'locked') {
-    const p = Math.min(99, Math.round((1 - mine.frozenLeft / 10000) * 100));
-    setHTML(el, `<div class="spinner"></div><h2>${t('frz_locked', { p })}</h2><p>${t('frz_locked2', { s: sec })}</p>`);
-  } else {
-    setHTML(el, `<h2>${t(`frz_${f}`, { s: sec })}</h2>`);
-  }
 }

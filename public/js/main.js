@@ -1,5 +1,5 @@
 import { Office, escapeHtml } from './scene.js';
-import { t, setLang, getLang, ROLE_ICON } from './i18n.js';
+import { t, ROLE_ICON } from './i18n.js';
 import { Minigames } from './minigames.js';
 import { Net } from './net.js';
 import { Chat } from './chat.js';
@@ -27,7 +27,7 @@ const keys = new Set();
 let actx = null;
 let muted = false;
 const SFX = {
-  tick: [[880, 0.04]], ok: [[660, 0.07], [990, 0.09]], err: [[160, 0.18, 'sawtooth']], bug: [[300, 0.08], [200, 0.12]],
+  tick: [[880, 0.04]], ok: [[660, 0.07], [990, 0.09]], err: [[160, 0.18, 'sawtooth']],
   pop: [[1200, 0.05]], mash: [[240, 0.05, 'square']], slurp: [[420, 0.1], [300, 0.15]],
   win: [[523, 0.1], [659, 0.1], [784, 0.18]], good: [[523, 0.08], [784, 0.12]], bad: [[392, 0.1], [262, 0.18]],
   alarm: [[880, 0.18, 'square'], [660, 0.18, 'square'], [880, 0.18, 'square'], [660, 0.18, 'square']],
@@ -70,15 +70,13 @@ function toast(text, kind = 'info') {
 function applyStaticText() {
   document.querySelectorAll('[data-i18n]').forEach((el) => { el.textContent = t(el.dataset.i18n); });
   document.querySelectorAll('[data-i18n-ph]').forEach((el) => { el.placeholder = t(el.dataset.i18nPh); });
-  $('#btn-lang').textContent = t('langBtn');
   document.title = t('title');
-  P.clearCache();
-  chat.playersKey = null;
-  chat.render();
 }
 const myState = () => state && state.players.find((p) => p.id === net.pid);
 const secs = (ms) => Math.ceil(ms / 1000);
 function setBoard(on) { boardOpen = on; if (state) P.renderBoard(state, net.pid, boardOpen); }
+// A ticket in Test can be tested by anyone except the person who wrote it.
+const testable = (s) => s.tickets.find((x) => x.stage === 'qa' && x.owner !== net.pid);
 
 // ---------- Networking ----------
 const net = new Net({
@@ -96,7 +94,6 @@ const net = new Net({
       case 'emote': office?.showEmote(e.id, t(`emote${e.i}`)); return sfx('toast');
       case 'codeResult': return mg.codeResult(e);
       case 'qaResult': return mg.qaResult(e);
-      case 'bugsResult': return mg.bugsResult(e);
       case 'denied': return leaveRoom(t(e.key));
       default:
     }
@@ -118,9 +115,10 @@ function emit(ev, data) {
 
 function onFx({ key, params, kind }) {
   toast(t(key, params), kind);
-  if (key === 'ev_fire' || key === 'ev_deploy' || key === 'ev_emergency') { sfx('alarm'); office?.shake(0.9); }
+  if (key === 'ev_fire' || key === 'ev_deploy' || key === 'ev_emergency' || key === 'ev_meeting') { sfx('alarm'); office?.shake(0.9); }
   else if (key === 'ev_phone') sfx('ring');
-  else if (key === 'ev_forcepush' || key === 'mt_pip') { sfx('bad'); office?.shake(0.6); }
+  else if (key === 'mt_caught') { sfx('win'); office?.shake(0.5); }
+  else if (key === 'mt_innocent') { sfx('bad'); office?.shake(0.6); }
   else if (kind === 'chaos') { sfx('bad'); office?.shake(0.35); }
   else if (kind === 'good') sfx('good');
   else if (kind === 'bad') sfx('bad');
@@ -150,7 +148,7 @@ function leaveRoom(message = '') {
   try { sessionStorage.removeItem('df_room'); } catch { /* storage unavailable */ }
   $('#join-err').textContent = message;
   show($('#join'), true);
-  for (const id of ['#lobby-panel', '#topbar', '#players', '#bottombar', '#help', '#briefing', '#morning', '#evening', '#meeting', '#retro', '#results', '#frozen', '#board', '#deploy-hud', '#hint']) show($(id), false);
+  for (const id of ['#lobby-panel', '#topbar', '#players', '#bottombar', '#help', '#briefing', '#morning', '#evening', '#meeting', '#results', '#board', '#deploy-hud', '#hint']) show($(id), false);
   chat.setVisible(false);
   office?.syncPlayers([], net.pid, null);
 }
@@ -178,7 +176,6 @@ function onState(s) {
   office.setFire(s.fire);
   office.setPhone(s.phone);
   office.setPizza(s.pizza > 0);
-  office.setCoffeeBroken(s.coffeeBroken);
   office.setCEO(s.ceo);
   office.setBoard(s.tickets);
   office.setDeploy(s.deploy);
@@ -193,9 +190,7 @@ function onState(s) {
   P.renderEvening(s, joined);
   P.renderMeeting(s, joined, myId);
   P.renderDeploy(s, joined);
-  P.renderRetro(s, joined, myId);
   P.renderResults(s, joined, mine, myId);
-  P.renderFrozen(s, joined, mine);
   P.renderBoard(s, myId, boardOpen);
   renderHUD(s, mine);
   mg.onState(s, mine);
@@ -208,39 +203,23 @@ function onPhaseChange(phase) {
   holding = false;
   if (phase !== 'playing' && phase !== 'deploy') boardOpen = false;
   if (phase === 'briefing') sfx('win');
-  if (phase === 'retro') { P.resetPeer(); sfx('alarm'); }
-  if (phase === 'results') sfx(['shipped', 'onfire'].includes(state.results?.ending) ? 'win' : 'bad');
+  if (phase === 'results') { $('#toasts').innerHTML = ''; sfx(state.results?.shipped ? 'win' : 'bad'); }
 }
 
-// What should *I* do next? Answers the "I don't know what to do" problem.
-// A stage is mine if my role owns it, nobody's role does, or the ticket escalated to anyone.
-function canDoTicket(s, stage) {
-  const role = s.me?.role;
-  const owned = !s.stageRole[stage] || s.stageRole[stage] === role;
-  return owned || s.tickets.some((x) => x.stage === stage && x.open);
-}
-function stageTicket(s, stage) {
-  const role = s.me?.role;
-  const owned = !s.stageRole[stage] || s.stageRole[stage] === role;
-  return s.tickets.find((x) => x.stage === stage && (owned || x.open));
-}
-
+// What should *I* do next? The answer to "I don't know what to do".
 function myHint(s, mine) {
   if (s.phase === 'deploy') return t('hint_deploy');
-  const can = (stage) => canDoTicket(s, stage);
-  const tk = (stage) => stageTicket(s, stage);
-  const p = { ticket: '' };
-  if (tk('review') && can('review') && s.stageRole.review) return t('hint_review', { ticket: tkName(tk('review')) });
-  if (tk('qa') && can('qa') && s.stageRole.qa) return t('hint_qa', { ticket: tkName(tk('qa')) });
-  if (tk('demo') && can('demo') && s.stageRole.demo) return t('hint_demo', { ticket: tkName(tk('demo')) });
+  if (s.me?.caught) return t('hint_caught');
+  const test = testable(s);
+  if (test) return t('hint_qa', { ticket: tkName(test) });
   const own = s.tickets.find((x) => x.stage === 'dev' && x.owner === mine.id);
   if (own) return t('hint_code', { ticket: tkName(own), p: own.progress, w: own.work });
-  for (const st of ['review', 'qa', 'demo']) if (tk(st) && can(st)) return t(`hint_${st}`, { ticket: tkName(tk(st)) });
   if (s.tickets.some((x) => x.stage === 'todo')) return t('hint_claim');
   const dev = s.tickets.find((x) => x.stage === 'dev');
   if (dev) return t('hint_help', { ticket: tkName(dev) });
-  if (s.prodBugs > 0) return t('hint_bugs');
-  return t('hint_idle', p);
+  const waiting = s.tickets.find((x) => x.stage === 'qa' && x.owner === mine.id);
+  if (waiting) return t('hint_wait', { ticket: tkName(waiting) });
+  return t('hint_idle');
 }
 
 function renderHUD(s, mine) {
@@ -249,76 +228,65 @@ function renderHUD(s, mine) {
   show($('#players'), working || (joined && s.phase === 'meeting'));
   show($('#bottombar'), working || (joined && s.phase === 'lobby'));
   show($('#help'), joined && (s.phase === 'lobby' || s.phase === 'playing'));
-  show($('#hint'), working && !!mine && !mine.frozen);
+  show($('#hint'), working && !!mine);
   show($('#btn-board'), working);
   if (!joined || s.phase === 'lobby') return;
 
   const hh = Math.floor(s.clock);
   const mm = Math.floor((s.clock % 1) * 60);
-  $('#hud-day').textContent = s.day ? `${t(`day${s.day}`)} · ${t(`theme${s.day}`)}` : '';
+  $('#hud-day').textContent = s.day ? t(`day${s.day}`) : '';
   $('#hud-clock').textContent = `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
   $('#hud-clock').classList.toggle('late', s.day === 5 && s.clock >= 15);
   const done = s.tickets.filter((x) => x.stage === 'done').length;
   $('#hud-tickets').textContent = `${done}/${s.tickets.length}`;
-  $('#hud-prod').textContent = `${s.prodBugs}`;
-  $('#hud-prod').parentElement.classList.toggle('danger', s.prodBugs > s.players.length);
   $('#hud-client').style.width = `${s.happiness}%`;
   $('#hud-client').classList.toggle('low', s.happiness < 30);
   $('#hud-client-t').textContent = s.happiness < 30 ? '😡' : s.happiness < 60 ? '😐' : '😊';
   const chips = [];
+  if (s.me?.boost) chips.push(`<span class="chip green">${t('hud_boost', { s: secs(s.me.boost) })}</span>`);
   if (s.me?.pip) chips.push(`<span class="chip red">${t('hud_pip')}</span>`);
+  if (s.me?.caught) chips.push(`<span class="chip red">${t('hud_caught')}</span>`);
   if (s.fire) chips.push(`<span class="chip red">${t('hud_fire')}</span>`);
-  if (s.coffeeBroken) chips.push(`<span class="chip">${t('hud_coffee')}</span>`);
-  if (s.review) chips.push(`<span class="chip green">${t('hud_review', { s: secs(s.review) })}</span>`);
-  if (s.wifi) chips.push(`<span class="chip">${t('hud_wifi', { s: secs(s.wifi) })}</span>`);
   if (s.ceo) chips.push(`<span class="chip gold">${t('hud_ceo', { s: secs(s.ceo) })}</span>`);
   setHTML($('#hud-chips'), chips.join(''));
   if (mine) $('#hint').textContent = myHint(s, mine);
 
-  setHTML($('#players'), s.players.map((p) => {
-    const st = p.frozen ? t(`st_${p.frozen}`) : '';
-    const col = p.stress >= 80 ? '#ff6b6b' : p.stress >= 50 ? '#fcc419' : '#51cf66';
-    return `<div class="pl${p.id === net.pid ? ' me' : ''}"><i style="background:${p.color}"></i>
-      <span class="pl-name">${p.role ? ROLE_ICON[p.role] : ''} ${escapeHtml(p.name)} ${st}${p.pip ? ' 📉' : ''}</span>
-      <div class="stress"><div style="width:${p.stress}%;background:${col}"></div></div></div>`;
-  }).join(''));
+  setHTML($('#players'), s.players.map((p) => `<div class="pl${p.id === net.pid ? ' me' : ''}"><i style="background:${p.color}"></i>
+      <span class="pl-name">${p.role ? ROLE_ICON[p.role] : ''} ${escapeHtml(p.name)}${p.boost ? ' ⚡' : ''}${p.pip ? ' 📉' : ''}${p.caught ? ' 🚔' : ''}</span></div>`).join(''));
 
   const ab = $('#btn-ability');
   show(ab, working && !!mine?.role);
   if (mine?.role) {
-    const blocked = s.me?.pip || (mine.role === 'manager' && s.emergencyUsed);
+    const blocked = s.me?.pip || s.me?.caught || (mine.role === 'leader' && s.emergencyUsed);
     ab.querySelector('.lbl').textContent = `Q · ${t(`ab_${mine.role}`)}${mine.cd ? ` (${secs(mine.cd)})` : ''}`;
     ab.querySelector('.cd').style.width = blocked ? '100%' : `${(mine.cd / mine.cdMax) * 100}%`;
-    ab.classList.toggle('ready', !mine.cd && !mine.frozen && !blocked);
+    ab.classList.toggle('ready', !mine.cd && !blocked);
   }
   const sec = $('#btn-secret');
   const hasSecret = s.me && s.me.secret !== null && s.me.secret !== undefined;
   show(sec, working && hasSecret);
   if (hasSecret) {
-    sec.querySelector('.lbl').textContent = `${t(`sec_btn_${s.me.agenda}`)}${s.me.secret ? ` (${secs(s.me.secret)})` : ''}`;
+    sec.querySelector('.lbl').textContent = `${t('sec_btn')}${s.me.secret ? ` (${secs(s.me.secret)})` : ''}`;
     sec.querySelector('.cd').style.width = s.me.pip ? '100%' : `${(s.me.secret / s.me.secretMax) * 100}%`;
-    sec.classList.toggle('ready', !s.me.secret && !mine.frozen && !s.me.pip);
+    sec.classList.toggle('ready', !s.me.secret && !s.me.pip);
   }
 }
 
 // ---------- Interaction ----------
 function actionFor(st) {
   const s = state;
-  const can = (stage) => canDoTicket(s, stage);
-  const tk = (stage) => stageTicket(s, stage);
   if (s.phase === 'deploy') {
     if (st.type === 'server' && s.fire) return 'fire';
     return DEPLOY_STATIONS.includes(st.id) ? 'hold' : null;
   }
   switch (st.type) {
     case 'desk': return 'code';
-    case 'board': return tk('review') && can('review') ? 'review' : 'board';
-    case 'qa': return tk('qa') && can('qa') ? 'qa' : 'bugsProd';
-    case 'coffee': return s.coffeeBroken ? 'fixCoffee' : 'coffee';
+    case 'board': return 'board';
+    case 'qa': return testable(s) ? 'qa' : null;
+    case 'coffee': return 'coffee';
     case 'server': return s.fire ? 'fire' : null;
-    case 'phone': return s.phone ? 'phone' : tk('demo') && can('demo') ? 'demo' : null;
+    case 'phone': return s.phone ? 'phone' : null;
     case 'meeting': return s.pizza > 0 && !myState()?.ateP ? 'pizza' : null;
-    case 'exit': return 'exit';
     default: return null;
   }
 }
@@ -336,53 +304,49 @@ function detectAction(mine) {
   return best;
 }
 const ACT_LABEL = {
-  code: 'act_code', review: 'act_review', qa: 'act_qa', bugsProd: 'act_bugsProd', demo: 'act_demo', board: 'act_board', hold: 'act_hold',
-  coffee: 'act_coffee', fixCoffee: 'act_fixCoffee', fire: 'act_fire', phone: 'act_phone', pizza: 'act_pizza', exit: 'hint_exit',
+  code: 'act_code', qa: 'act_qa', board: 'act_board', hold: 'act_hold',
+  coffee: 'act_coffee', fire: 'act_fire', phone: 'act_phone', pizza: 'act_pizza',
 };
-function renderAction(mine) {
+function renderAction() {
   const btn = $('#btn-action');
-  const on = !!action && !mine?.frozen && !mg.isOpen();
+  const on = !!action && !mg.isOpen();
   show(btn, on);
   if (!on) { holding = false; return; }
-  const label = action.act === 'exit' ? t('hint_exit') : `${t(ACT_LABEL[action.act])}  [E]`;
+  const label = `${t(ACT_LABEL[action.act])}  [E]`;
   if (btn.textContent !== label) btn.textContent = label;
-  btn.classList.toggle('hint', action.act === 'exit');
-  btn.classList.toggle('urgent', ['fire', 'phone', 'fixCoffee', 'pizza', 'review', 'qa', 'demo'].includes(action.act));
+  btn.classList.toggle('urgent', ['fire', 'phone', 'pizza', 'qa'].includes(action.act));
   btn.classList.toggle('holding', action.act === 'hold' && holding);
 }
 function interact() {
   const mine = myState();
-  if (!action || !mine || mine.frozen || mg.isOpen()) return;
+  if (!action || !mine || mg.isOpen()) return;
   keys.clear();
   moveTarget = null;
   me.moving = false;
   const s = state;
-  const tk = (stage) => stageTicket(s, stage);
   switch (action.act) {
-    case 'exit': case 'hold': return;
+    case 'hold': return;
     case 'board': return setBoard(!boardOpen);
     case 'pizza':
       emit('task', { type: 'pizza' });
-      toast(t('pizzaYum'), 'good');
+      toast(t('boostOn'), 'good');
       return sfx('good');
     case 'code': {
       const devs = s.tickets.filter((x) => x.stage === 'dev');
       return mg.open('code', { tickets: devs, preferred: devs.find((x) => x.owner === net.pid)?.id });
     }
-    case 'review': return mg.open('review', { ticket: tk('review') });
-    case 'qa': return mg.open('qa', { ticket: tk('qa') });
-    case 'demo': return mg.open('demo', { ticket: tk('demo') });
+    case 'qa': return mg.open('qa', { ticket: testable(s) });
+    case 'coffee': return mg.open('coffee', { onDone: () => toast(t('boostOn'), 'good') });
     default: return mg.open(action.act, { q: s.phone?.q });
   }
 }
 function useAbility() {
   const mine = myState();
-  if (!mine || !mine.role || mine.cd || mine.frozen || !['playing', 'deploy'].includes(state.phase)) return;
+  if (!mine || !mine.role || mine.cd || !['playing', 'deploy'].includes(state.phase)) return;
   emit('ability');
 }
 function useSecret() {
-  const mine = myState();
-  if (!mine || !state.me || state.me.secret === null || state.me.secret || mine.frozen) return;
+  if (!state?.me || state.me.secret === null || state.me.secret) return;
   emit('secret');
 }
 
@@ -415,7 +379,7 @@ function collide(x, z) {
   return [x, z];
 }
 function updateMovement(dt, mine) {
-  const canMove = joined && mine && !mine.frozen && !mg.isOpen() && !typing && ['lobby', 'playing', 'deploy'].includes(state.phase);
+  const canMove = joined && mine && !mg.isOpen() && !typing && ['lobby', 'playing', 'deploy'].includes(state.phase);
   let dx = 0;
   let dz = 0;
   if (canMove) {
@@ -437,8 +401,7 @@ function updateMovement(dt, mine) {
   me.moving = len > 0;
   if (me.moving) {
     holding = false;
-    const speed = mine.stress >= 80 ? 3.4 : 4.6;
-    const step = Math.min(speed * dt, moveTarget ? len : Infinity);
+    const step = Math.min(4.6 * dt, moveTarget ? len : Infinity);
     const [nx, nz] = collide(me.x + (dx / len) * step, me.z + (dz / len) * step);
     if (moveTarget && Math.hypot(nx - me.x, nz - me.z) < step * 0.2) moveTarget = null; // blocked by furniture
     me.x = nx;
@@ -465,8 +428,8 @@ function loop(now) {
       ch.moving = me.moving;
     }
     action = detectAction(mine);
-    renderAction(mine);
-    office.setHighlight(action && action.act !== 'exit' ? action.st : null);
+    renderAction();
+    office.setHighlight(action ? action.st : null);
     if (joined && mine) office.setFocus(me.x, me.z, office.portrait ? 1 : 0.12);
     else office.setFocus(0, 0, 0);
   }
@@ -487,6 +450,7 @@ window.addEventListener('keydown', (e) => {
     return;
   }
   const k = e.key.toLowerCase();
+  if (k === 'escape' && !$('#rules').classList.contains('hidden')) return show($('#rules'), false);
   if (k === 'enter' && joined) { e.preventDefault(); chat.focus(); return; }
   if (k === 'escape' && boardOpen) return setBoard(false);
   if (MOVE_KEYS.includes(k)) { keys.add(k); e.preventDefault(); }
@@ -521,7 +485,7 @@ actionBtn.addEventListener('pointerdown', (e) => {
 for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) actionBtn.addEventListener(ev, () => { holding = false; });
 actionBtn.addEventListener('click', () => { if (action?.act !== 'hold') interact(); });
 
-// Board cards re-render with live timers, so claim on pointerdown rather than click.
+// Board cards re-render with live progress, so claim on pointerdown rather than click.
 document.addEventListener('pointerdown', (e) => {
   const claim = e.target.closest('[data-claim]');
   if (claim) { e.preventDefault(); emit('claim', { ticket: Number(claim.dataset.claim) }); sfx('ok'); }
@@ -529,15 +493,6 @@ document.addEventListener('pointerdown', (e) => {
 document.addEventListener('click', (e) => {
   const mvote = e.target.closest('[data-mvote]');
   if (mvote && !mvote.disabled) { emit('vote', { target: mvote.dataset.mvote }); sfx('ok'); return; }
-  const peer = e.target.closest('[data-peer]');
-  if (peer && !peer.disabled) {
-    const [kind, id] = peer.dataset.peer.split(':');
-    if (kind === 'submit') emit('peer', P.peerPayload());
-    else P.peerAction(kind, id);
-    sfx('tick');
-    if (state) P.renderRetro(state, joined, net.pid);
-    return;
-  }
   if (e.target.closest('#btn-start')) emit('start');
   if (e.target.closest('#btn-restart')) emit('restart');
   if (e.target.closest('#btn-board') || e.target.closest('#board .board-close')) setBoard(!boardOpen);
@@ -550,11 +505,8 @@ $('#btn-create').addEventListener('click', createRoom);
 $('#btn-join').addEventListener('click', joinRoom);
 $('#btn-ability').addEventListener('click', useAbility);
 $('#btn-secret').addEventListener('click', useSecret);
-$('#btn-lang').addEventListener('click', () => {
-  setLang(getLang() === 'en' ? 'mm' : 'en');
-  applyStaticText();
-  renderEmotes();
-});
+for (const b of document.querySelectorAll('[data-rules]')) b.addEventListener('click', () => show($('#rules'), true));
+$('#rules').addEventListener('click', (e) => { if (e.target.id === 'rules' || e.target.closest('.rules-close')) show($('#rules'), false); });
 $('#btn-mute').addEventListener('click', () => {
   muted = !muted;
   $('#btn-mute').textContent = muted ? '🔇' : '🔊';
@@ -572,7 +524,6 @@ $('#emotes').addEventListener('click', (e) => {
 try { $('#join-name').value = localStorage.getItem('df_name') || ''; } catch { /* storage unavailable */ }
 const roomParam = new URLSearchParams(location.search).get('room');
 if (roomParam) $('#join-code').value = roomParam.toUpperCase();
-setLang(getLang());
 applyStaticText();
 renderEmotes();
 chat.setVisible(false);

@@ -294,6 +294,29 @@ tr.me td { background: rgba(255,212,59,.08); }
 .mg-zone { position: absolute; top: 0; bottom: 0; width: 18%; background: rgba(81, 207, 102, .45); }
 .mg-marker { position: absolute; top: 0; bottom: 0; width: 3%; background: var(--accent); border-radius: 4px; }
 
+/* Rules */
+.btn.ghost { background: transparent; border: 1px solid var(--line); margin-top: 6px; font-size: 14px; }
+#rules { z-index: 40; }
+.rules { position: relative; text-align: left; max-height: 90vh; overflow-y: auto; line-height: 1.7; }
+.rules h1 { text-align: center; }
+.rules h2 { font-size: 17px; margin: 18px 0 6px; color: var(--accent); }
+.rules p { margin: 4px 0; font-size: 14px; }
+.rules table td { white-space: normal; vertical-align: top; font-size: 14px; }
+.rules .r-goal { background: rgba(255, 212, 59, .1); border: 2px solid var(--accent); border-radius: 14px; padding: 4px 14px; text-align: center; }
+.rules .flow { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 6px 0; }
+.rules .flow span { background: #10111f; border-radius: 10px; padding: 6px 10px; text-align: center; font-weight: 700; font-size: 13px; line-height: 1.3; }
+.rules .flow small { color: var(--muted); font-weight: 500; }
+.rules .flow i { color: var(--accent); font-style: normal; font-weight: 800; }
+.rules-close { position: sticky; top: 0; float: right; background: var(--panel); border-radius: 8px; padding: 4px 10px; }
+.rules ol.three { margin: 4px 0; padding-left: 22px; font-size: 15px; line-height: 1.9; }
+.rules th { color: var(--muted); font-size: 12px; }
+.kanban { grid-template-columns: repeat(4, minmax(140px, 1fr)); }
+.hunter { font-size: 17px; font-weight: 800; color: #e599f7; }
+.win-line { font-weight: 800; color: var(--accent); }
+.team-result { font-size: 18px; font-weight: 800; }
+.bots-note { background: rgba(77, 171, 247, .12); border: 1px solid rgba(77, 171, 247, .4); border-radius: 10px; padding: 6px 8px; font-size: 12px !important; }
+.bot-tag { font-size: 10px; background: #495057; border-radius: 4px; padding: 0 4px; margin-left: 4px; }
+
 /* Phone-sized screens */
 @media (max-width: 720px) {
   #topbar { gap: 8px; padding: 6px 10px; top: 46px; }

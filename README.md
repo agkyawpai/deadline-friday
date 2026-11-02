@@ -50,58 +50,52 @@ vercel deploy --prod --yes   # redeploy so the env vars are picked up
 | Move | WASD / arrow keys / click the floor | Tap the floor |
 | Interact (yellow ring) | `E` / `Space` | Big yellow button |
 | Role ability | `Q` | Blue button |
-| Secret action (agenda) | `F` | Purple button |
+| Sabotage (Job Hunter only) | `F` | Purple button |
 | Sprint Board | `B` | 📋 Board (top right) |
 | Slack chat | `Enter` | 💬 (top right) |
 | Emote | `1`–`5` | Bottom buttons |
 
-**1 match ≈ 12 minutes.** The yellow hint bar at the top always tells you what to do next.
+The game UI is in Myanmar only. The in-game **📖 ကစားနည်း** page is the rule book.
+**1 match ≈ 10 minutes.** The yellow hint bar at the top always tells you what to do next.
 
-### A day in the office
-| Phase | What happens |
+### The 3 rules
+1. **A ticket is done when it's coded, then tested by someone other than its author.**
+2. **On Friday afternoon everyone deploys together** (hold the 4 glowing stations: server, board, QA, phone).
+3. **One player is a secret Job Hunter. Find them and vote.**
+
+### Winning
+| You are | You win if |
 |---|---|
-| 🌅 Morning standup | Today's theme and new tickets. Claim one |
-| 💻 Work | Tickets move through **Dev → Review → QA → Demo → Done** (desk → Sprint Board → QA lab → sales desk) |
-| 🗳️ Midday meeting | Mon/Wed: a client decision vote. Tue/Thu: a **PIP vote** (the most-voted player loses their ability, secret action and coding speed until tomorrow) |
-| 🌙 Evening | Tickets shipped today, overdue penalties, and on Wednesday the client demo result |
+| 👷 Employee | The team **ships**: Friday deploy succeeds and ≥40% of tickets are done |
+| 🕵️ Job Hunter (always one, could be a bot) | The team does **not** ship |
 
-| Day | Theme |
+The project is cancelled immediately if client happiness hits 0.
+
+### A day
+🌅 Morning: claim tickets → 💻 work → 🗳️ midday vote "who is the Job Hunter?" → 💻 work → 🌙 evening summary.
+In the vote, a player with **2+ votes** is caught. If they are the Job Hunter, they can no longer sabotage 🎉. If they are innocent, they get a PIP (ability off until tomorrow) 😬.
+
+### Roles (Q)
+| Role | Ability |
 |---|---|
-| Mon | 📋 Planning: 2 tickets, bonus-feature decision |
-| Tue | 💻 Build: 2 tickets, PIP vote |
-| Wed | 🎤 Client Demo: ship at least one ticket today or lose client −15. "AI everything?" decision |
-| Thu | 🧊 Code Freeze: no new tickets, PIP vote |
-| Fri | 🚀 Deploy: in the afternoon everyone must **hold** the glowing stations (server, board, QA, phone) at the same time |
+| 🧙 Senior Dev | Codes fast. Refactor: halves hidden bugs on open tickets |
+| 🐣 Junior Dev | Ask AI: 50% big progress / 50% extra hidden bugs |
+| 🔍 QA Tester | Tests ×2. Git Blame: privately reveals who did the latest sabotage |
+| 🧭 Team Leader | Emergency Meeting: instant vote (once a day) |
 
-Then comes the 💰 **Peer Review**: everyone gives 10 bonus points to teammates and blames one person. The results screen reveals the **true git log**.
+### Sabotage and clues
+The Job Hunter (`F`) injects hidden bugs into tickets, or unplugs the server during the deploy. Each sabotage posts a clue in **#git-log**: the saboteur's colour, their role, or nothing. The results screen reveals the true git log.
 
-### Roles (random; with fewer players the stage falls back to "anyone")
-| Role | Job in the pipeline | Ability (Q) |
-|---|---|---|
-| 🧙 Senior Dev | Codes ×1.6 (only after coffee) | Refactor: halves bugs on open tickets, −40% prod bugs |
-| 🐣 Junior Dev | Codes ×0.9, many hidden bugs | Ask AI: 50% big progress / 50% secretly adds bugs |
-| 🔍 QA Tester | Tests tickets (squash every 🐛, avoid 🦋) | Git Blame: privately reveals who did the latest suspicious action |
-| 🧭 Team Leader | Reviews tickets (spot the buggy line) | Review Mode: no new bugs for 15s |
-| 💼 Sales | Demos tickets to the client (timing game) | Promise Feature: client +18, +1 ticket |
-| 👔 Manager | Backup reviewer/demoer | Emergency All-hands: instant PIP vote (once a day) |
+### Events
+🔥 Server fire (put it out) · 📞 Client call (answer it) · 👴 CEO visit (be at a desk) · ☕ coffee / 🍕 pizza = ⚡ a short speed boost.
 
-A ticket left waiting **20s** in Review/QA/Demo escalates, and then **anyone** can do that step. Stalling is suspicious!
-
-### Secret agendas and sabotage
-| Agenda | Win | Secret action (F) |
-|---|---|---|
-| 🕵️ Job Hunter (4+ players, max 1) | The project does NOT ship | Inject hidden bugs, or unplug the server during the deploy |
-| Promotion Hunter | Most peer-review bonus points | Steal the dev credit of a finished ticket |
-| Blame Master | The person you blame ends up most blamed (not you) | Plant fake evidence on the nearest teammate |
-| Work-Life / Coffee / Bug Collector | Exit door on 3 days / 8 coffees / 15 bugs | — |
-
-Every sabotage posts a partial clue (time, place, and a colour or role a witness saw) in **#git-log**. Frames look exactly like real sabotage.
-
-### Chaos events
-🔥 Production Down (server on fire), 📞 client call, 🪟 forced OS update, 📶 WiFi down (Slack offline!), 👴 CEO visit, 🍕 free pizza, ☕💥 coffee machine broken, 💥 `git push --force`.
+### Bots
+With fewer than 4 people, smart bots fill the team. They path around the office, test other people's tickets, track suspicion from #git-log clues, Git Blame results and Slack accusations, talk in Slack, and vote. A bot can be the Job Hunter, in which case it sabotages when nobody is near and lies about it.
 
 ### Endings
-🏆 Shipped · 🔥 Shipped half-baked · 📉 Not enough features · 💥 Deploy failed · ❌ Project cancelled · 🚪 Mass resignation
+🏆 Shipped · 🔥 Shipped half-baked · 📉 Not enough features · 💥 Deploy failed · ❌ Project cancelled
+
+The previous "advanced" ruleset (v0.3: review/demo stages, 6 agendas, peer review…) is in git history at `802b851`.
 
 ## Tech
 - **Three.js** (low-poly, all procedural geometry, no model files) + **GSAP** for UI animation (both vendored in `public/vendor/`)
@@ -113,6 +107,7 @@ Every sabotage posts a partial clue (time, place, and a colour or role a witness
 ## Files
 ```
 lib/game.js          game rules, events, phases (pure; tuning constants at the top)
+lib/bots.js          server-side bots: pathfinding, planner, suspicion model, Slack talk
 lib/store.js         room storage: memory (LAN) or Upstash Redis (lock + Lua CAS)
 lib/handler.js       /api/sync request handling (shared by LAN and Vercel)
 api/sync.js          Vercel Function entry

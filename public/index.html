@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="my">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
@@ -14,7 +14,6 @@
   <div id="topbar" class="hidden">
     <div class="tb-day"><b id="hud-day"></b><span id="hud-clock"></span></div>
     <div class="tb-stat" title="Tickets">🎫 <span id="hud-tickets"></span></div>
-    <div class="tb-stat" title="Prod bugs">🐛 <span id="hud-prod"></span></div>
     <div class="tb-meter"><label data-i18n="hud_client"></label><div class="bar"><div id="hud-client" class="fill client"></div></div><span id="hud-client-t"></span></div>
     <div id="hud-chips"></div>
   </div>
@@ -23,7 +22,7 @@
 
   <div id="players" class="hidden"></div>
   <div id="toasts"></div>
-  <div id="corner"><button id="btn-board" class="hidden" data-i18n="boardBtn"></button><button id="btn-lang"></button><button id="btn-mute">🔊</button></div>
+  <div id="corner"><button id="btn-board" class="hidden" data-i18n="boardBtn"></button><button data-rules data-i18n="rulesBtn"></button><button id="btn-mute">🔊</button></div>
   <div id="chat" class="hidden"></div>
 
   <div id="bottombar" class="hidden">
@@ -49,6 +48,83 @@
         <button id="btn-join" class="btn" data-i18n="joinRoom"></button>
       </div>
       <p id="join-err" class="err"></p>
+      <button class="btn ghost" data-rules data-i18n="rulesBtn"></button>
+    </div>
+  </div>
+
+  <div id="rules" class="overlay hidden">
+    <div class="card wide rules">
+      <button class="rules-close">✕</button>
+      <h1>📖 ကစားနည်း</h1>
+
+      <section class="r-goal">
+        <h2>🎯 ပန်းတိုင်</h2>
+        <p><b>သောကြာ ညနေ ၅ နာရီ မတိုင်ခင် App ကို Deploy လုပ်ရမယ်။</b></p>
+      </section>
+
+      <section>
+        <h2>📜 Rule ၃ ခုတည်း</h2>
+        <ol class="three">
+          <li><b>Ticket ကို code ရေးပြီး တခြားတစ်ယောက်က test လုပ်ပေးရင် ပြီးတယ်</b></li>
+          <li><b>သောကြာ နေ့လယ်မှာ အားလုံး တစ်ပြိုင်နက် Deploy လုပ်ရမယ်</b></li>
+          <li><b>ကြားထဲမှာ သစ္စာဖောက် တစ်ယောက် ရှိတယ် — ဘယ်သူလဲ ရှာပြီး မဲပေးပါ</b></li>
+        </ol>
+      </section>
+
+      <section>
+        <h2>🏆 ဘယ်လိုနိုင်မလဲ</h2>
+        <table>
+          <tr><th>သင်က</th><th>နိုင်ဖို့</th></tr>
+          <tr><td>👷 ပုံမှန် ဝန်ထမ်း</td><td><b>အဖွဲ့ Ship ဖြစ်ရင် နိုင်တယ်</b></td></tr>
+          <tr><td>🕵️ သစ္စာဖောက် (Job Hunter)</td><td><b>အဖွဲ့ Ship မဖြစ်ရင် နိုင်တယ်</b></td></tr>
+        </table>
+        <p><b>Ship ဖြစ်တယ်</b> = ① သောကြာ Deploy အောင်မြင် + ② Ticket ၄၀% အထက် ပြီး<br>
+        ❌ Client ကျေနပ်မှု 😊 <b>0</b> ကျသွားရင် ချက်ချင်း ရှုံးတယ်</p>
+      </section>
+
+      <section>
+        <h2>🔁 Ticket လမ်းကြောင်း</h2>
+        <div class="flow">
+          <span>📋 Board<br><small>ticket ယူ</small></span><i>→</i>
+          <span>💻 Desk<br><small>code ရေး</small></span><i>→</i>
+          <span>🔍 QA lab<br><small>တခြားသူက test</small></span><i>→</i>
+          <span>✅<br><small>ပြီး</small></span>
+        </div>
+        <p>⚡ <b>ထိပ်က အဝါရောင်စာတန်း</b>က သင်လုပ်ရမယ့်အလုပ်ကို အမြဲ ပြပေးတယ် — အဲဒီအတိုင်း လိုက်လုပ်ရုံပဲ။</p>
+      </section>
+
+      <section>
+        <h2>👥 Role ၄ မျိုး (Q ခလုတ်)</h2>
+        <table>
+          <tr><th>Role</th><th>Ability</th></tr>
+          <tr><td>🧙 Senior Dev</td><td>Code မြန်တယ် · Refactor: ticket ထဲက bug တစ်ဝက် ပျောက်</td></tr>
+          <tr><td>🐣 Junior Dev</td><td>AI ကိုမေး: 🎲 50% ticket အများကြီး ပြီး / 50% bug ထပ်တိုး</td></tr>
+          <tr><td>🔍 QA Tester</td><td>Test ×2 · Git Blame: sabotage လုပ်သူကို လျှို့ဝှက် သိရမယ်</td></tr>
+          <tr><td>🧭 Team Leader</td><td>Emergency Meeting: ချက်ချင်း မဲပေးပွဲ ခေါ်</td></tr>
+        </table>
+      </section>
+
+      <section>
+        <h2>🕵️ သစ္စာဖောက်ကို ရှာနည်း</h2>
+        <p>သစ္စာဖောက်က <b>F</b> နဲ့ ticket ထဲ bug ထည့်တယ် · Deploy အချိန် server ကြိုးဖြုတ်တယ်<br>
+        လုပ်တိုင်း <b>#git-log</b> မှာ သဲလွန်စ (🔴🔵🟢 အရောင် ဒါမှမဟုတ် 🧙🐣 role) ပေါ်တယ်<br>
+        🗳️ နေ့လယ်တိုင်း မဲပေးမယ်: <b>မဲ ၂ မဲ</b> ရသူကို ဖမ်းမယ် → သစ္စာဖောက်ဆိုရင် 🎉 sabotage မလုပ်နိုင်တော့ · မှားဖမ်းရင် 😬 အဲဒီလူ မနက်ဖြန်အထိ ability ပိတ်</p>
+      </section>
+
+      <section>
+        <h2>⚠️ အရေးပေါ်</h2>
+        <p>🔥 Server မီးလောင် → မီးငြိမ်း · 📞 Client ဖုန်း → ကိုင် · 👴 CEO → desk မှာ ရှိနေ · ☕🍕 စားရင် ⚡ ခဏ မြန်</p>
+      </section>
+
+      <section>
+        <h2>🤖 Bot</h2>
+        <p>လူ ၄ ယောက် မပြည့်ရင် Bot တွေ ဝင်ဆော့ပေးမယ်။ အလုပ်ကောင်းကောင်းလုပ်တယ်၊ Slack မှာ စကားပြောတယ်… <b>Bot ကလည်း သစ္စာဖောက် ဖြစ်နိုင်တယ်!</b></p>
+      </section>
+
+      <section>
+        <h2>🎮 ခလုတ်</h2>
+        <p>ရွှေ့: WASD / ကြမ်းပြင် click · <b>E</b> လုပ်ဆောင် · <b>Q</b> ability · <b>F</b> sabotage · <b>B</b> Board · <b>Enter</b> Slack · <b>1–5</b> emote</p>
+      </section>
     </div>
   </div>
   <div id="lobby-panel" class="panel hidden"></div>
@@ -62,7 +138,6 @@
   <div id="morning" class="overlay hidden"><div class="card wide"><div class="m-head"></div><div class="m-board"></div><p class="countdown m-left"></p></div></div>
   <div id="evening" class="overlay hidden"></div>
   <div id="meeting" class="overlay hidden"><div class="card"><div class="mt-left countdown"></div><div class="mt-body"></div></div></div>
-  <div id="retro" class="overlay hidden"><div class="card"><div class="retro-left countdown"></div><div class="retro-body"></div></div></div>
   <div id="results" class="overlay hidden"></div>
   <div id="frozen" class="hidden"></div>
   <div id="modal" class="hidden"></div>

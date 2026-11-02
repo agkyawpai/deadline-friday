@@ -541,8 +541,8 @@ export class Office {
     this.boardKey = key;
     const c = this.boardTex.userData.canvas;
     const ctx = c.getContext('2d');
-    const cols = ['TODO', 'DEV', 'REVIEW', 'QA', 'DEMO', 'DONE'];
-    const stages = ['todo', 'dev', 'review', 'qa', 'demo', 'done'];
+    const cols = ['TODO', 'CODE', 'TEST', 'DONE'];
+    const stages = ['todo', 'dev', 'qa', 'done'];
     const colW = c.width / cols.length;
     ctx.fillStyle = '#fdfdfd'; ctx.fillRect(0, 0, c.width, c.height);
     ctx.font = 'bold 20px sans-serif';
